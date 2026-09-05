@@ -32,28 +32,28 @@ jobs:
       # attaches to it by repository id. Loading the slices first fails on a foreign key
       # against an empty table - which is exactly what a clean-checkout test caught.
       - name: Fetch HACS data and Home Assistant analytics
-        run: betterhacs sync
+        run: hacs-trends sync
 
       # The database is a cache. What is committed - the daily slices and the star
       # history - is the truth, and it is rebuilt from them on every run.
       - name: Rebuild history from the committed files
         run: |
-          betterhacs history-load
-          betterhacs load-stars
+          hacs-trends history-load
+          hacs-trends load-stars
 
       # The automatic token is enough: about 90 queries at one rate-limit point each.
       - name: Enrich from GitHub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          betterhacs enrich
-          betterhacs refine-releases
+          hacs-trends enrich
+          hacs-trends refine-releases
 
       - name: Write today's slice and build the page
         run: |
-          betterhacs history-write
-          betterhacs stats
-          betterhacs export --out web/data.json
+          hacs-trends history-write
+          hacs-trends stats
+          hacs-trends export --out web/data.json
 
       - name: Commit today's slice
         run: |

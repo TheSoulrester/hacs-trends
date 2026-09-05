@@ -1,3 +1,7 @@
+> **Archiv.** Dieser Entwurf stammt aus der Zeit, als das Projekt betterHACs hiess,
+> und ist durch PLAN.md ersetzt. Er bleibt erhalten, weil er festhaelt, welche
+> Annahmen spaeter durch Messungen widerlegt wurden.
+
 # betterHACs — Trend- und Wartungs-Dashboard für HACS
 
 Entwurf, Stand 2026-09-05. Noch keine Zeile Code geschrieben.
@@ -276,7 +280,7 @@ betterHACs/
 ├── .python-version
 ├── .env.example                # GITHUB_TOKEN (nur Anreicherung + Bootstrap)
 ├── README.md
-├── src/betterhacs/
+├── src/hacs_trends/
 │   ├── config.py
 │   ├── db.py                   # SQLAlchemy-Modelle, Schema-Migration
 │   ├── sources/
@@ -299,9 +303,9 @@ betterHACs/
 Start mit `uv`:
 ```
 uv sync
-uv run betterhacs sync            # HACS + Analytics + GraphQL
-uv run betterhacs bootstrap-stars # einmalig, läuft ~2 h
-uv run betterhacs export
+uv run hacs-trends sync            # HACS + Analytics + GraphQL
+uv run hacs-trends bootstrap-stars # einmalig, läuft ~2 h
+uv run hacs-trends export
 ```
 
 ---

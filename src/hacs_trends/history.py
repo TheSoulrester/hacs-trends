@@ -86,7 +86,7 @@ def load_slices(session, root: Path) -> dict:
     known = {rid for (rid,) in session.execute(select(Repo.id))}
     if not known:
         raise SystemExit(
-            "The repository list is empty. Run 'betterhacs sync' first — history attaches "
+            "The repository list is empty. Run 'hacs-trends sync' first — history attaches "
             "to repositories, so the list has to exist before the slices can be loaded."
         )
 

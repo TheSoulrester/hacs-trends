@@ -51,7 +51,7 @@ def _iso_day(value) -> str | None:
 def build_payload(session, today: date | None = None) -> dict:
     today = today or session.scalar(select(func.max(Snapshot.day)))
     if today is None:
-        raise RuntimeError("Keine Snapshots in der Datenbank — erst 'betterhacs sync' laufen lassen.")
+        raise RuntimeError("Keine Snapshots in der Datenbank — erst 'hacs-trends sync' laufen lassen.")
 
     # Stars come from the bootstrapped history when it is there: an exact sum over
     # days, with no reference snapshot to pick and no tolerance to apply. Only if the

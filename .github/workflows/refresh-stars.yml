@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Rebuild the repository list
-        run: betterhacs sync
+        run: hacs-trends sync
         env:
           GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
 
@@ -57,7 +57,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
         run: |
           rm -f data/stars/star_days.jsonl data/stars/star_days.jsonl.gz data/stars/progress.jsonl
-          betterhacs bootstrap-stars
+          hacs-trends bootstrap-stars
           gzip -kf data/stars/star_days.jsonl
 
       - name: Commit the refreshed history

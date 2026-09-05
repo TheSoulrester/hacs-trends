@@ -79,8 +79,8 @@ GITHUB_TOKEN=ghp_...
 ```
 
 ```bash
-uv run betterhacs enrich            # archived state, releases, commits, issues
-uv run betterhacs bootstrap-stars   # full star history, ~35 minutes, resumable
+uv run hacs-trends enrich            # archived state, releases, commits, issues
+uv run hacs-trends bootstrap-stars   # full star history, ~35 minutes, resumable
 ```
 
 ## How it stays up to date

@@ -1,4 +1,4 @@
-/* betterHACs front end - console layout.
+/* HACS Trends front end - console layout.
  * No framework and no table library: 4,193 rows need a scroll window, and that is
  * less code than wiring up a dependency. The only external requirement is the webfont. */
 (function () {

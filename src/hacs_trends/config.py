@@ -52,8 +52,8 @@ class Config:
 
 
 def load_config() -> Config:
-    db = os.getenv("BETTERHACS_DB", "data/betterhacs.db")
-    fixtures = os.getenv("BETTERHACS_FIXTURES") or None
+    db = os.getenv("HACS_TRENDS_DB", "data/hacs_trends.db")
+    fixtures = os.getenv("HACS_TRENDS_FIXTURES") or None
     return Config(
         db_path=(ROOT / db) if not Path(db).is_absolute() else Path(db),
         fixtures=(ROOT / fixtures) if fixtures else None,

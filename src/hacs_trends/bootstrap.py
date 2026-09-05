@@ -84,7 +84,7 @@ def run_bootstrap(
     if limit:
         repos = repos[:limit]
     if not repos:
-        raise SystemExit("No repositories in the database — run 'betterhacs sync' first.")
+        raise SystemExit("No repositories in the database — run 'hacs-trends sync' first.")
 
     from .sources.github_stars import DEFAULT_WEEKS
 

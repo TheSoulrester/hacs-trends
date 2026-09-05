@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from betterhacs.sources.github_stars import StarBootstrap, _load_done  # noqa: E402
+from hacs_trends.sources.github_stars import StarBootstrap, _load_done  # noqa: E402
 from fake_github import REPOS, serve  # noqa: E402
 
 BASE = "http://127.0.0.1:8731"

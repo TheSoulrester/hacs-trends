@@ -42,7 +42,7 @@ def _open_any(path: Path):
     if gz.is_file():
         return gzip.open(gz, "rt")
     raise FileNotFoundError(
-        f"Neither {path} nor {gz} found — run 'betterhacs bootstrap-stars' first."
+        f"Neither {path} nor {gz} found — run 'hacs-trends bootstrap-stars' first."
     )
 
 
@@ -57,7 +57,7 @@ def load_bootstrap(session, path: Path) -> dict:
     known = {rid for (rid,) in session.execute(select(Repo.id))}
     if not known:
         raise SystemExit(
-            "The repository list is empty. Run 'betterhacs sync' first — star history "
+            "The repository list is empty. Run 'hacs-trends sync' first — star history "
             "attaches to repositories, so the list has to exist before it can be loaded."
         )
     rows: list[dict] = []

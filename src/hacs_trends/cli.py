@@ -25,7 +25,7 @@ def _setup_logging(verbose: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="betterhacs")
+    parser = argparse.ArgumentParser(prog="hacs-trends")
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 

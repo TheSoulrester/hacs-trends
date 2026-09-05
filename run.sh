@@ -60,7 +60,7 @@ else
 fi
 
 cmd() {
-  if [ "$PY" = "uv" ]; then uv run betterhacs "$@"; else "$VENV/bin/python" -m betterhacs.cli "$@"; fi
+  if [ "$PY" = "uv" ]; then uv run hacs-trends "$@"; else "$VENV/bin/python" -m hacs_trends.cli "$@"; fi
 }
 
 case "${1:-serve}" in
@@ -68,7 +68,7 @@ case "${1:-serve}" in
   bootstrap)
     # One-time: fetch the full star history. Takes roughly 30-90 minutes and is
     # resumable - if it stops, run it again and it picks up where it left off.
-    if [ ! -f data/betterhacs.db ]; then
+    if [ ! -f data/hacs_trends.db ]; then
       echo "==> No database yet, running sync first"
       cmd sync
     fi
