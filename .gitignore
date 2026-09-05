@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.pytest_cache/
+.ruff_cache/
+docs/data.json
+
+# Fixtures sind regenerierbar (siehe README) und mit ~2,6 MB zu gross fuers Repo
+data/fixtures/
