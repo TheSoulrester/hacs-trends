@@ -65,6 +65,23 @@ cmd() {
 
 case "${1:-serve}" in
   sync)   cmd sync ;;
+  bootstrap)
+    # One-time: fetch the full star history. Takes roughly 30-90 minutes and is
+    # resumable - if it stops, run it again and it picks up where it left off.
+    if [ ! -f data/betterhacs.db ]; then
+      echo "==> No database yet, running sync first"
+      cmd sync
+    fi
+    if [ ! -f .env ] || ! grep -q "^GITHUB_TOKEN=." .env 2>/dev/null; then
+      echo "GITHUB_TOKEN missing in .env - see .env.example" >&2
+      exit 1
+    fi
+    cmd bootstrap-stars
+    ;;
+  test)
+    if [ "$PY" = "uv" ]; then uv run python tests/test_bootstrap.py
+    else "$VENV/bin/python" tests/test_bootstrap.py; fi
+    ;;
   export) cmd export --out web/data.json ;;
   stats)  cmd stats ;;
   serve)
@@ -77,5 +94,5 @@ case "${1:-serve}" in
     if [ "$PY" = "uv" ]; then uv run python -m http.server -d web 8000
     else "$VENV/bin/python" -m http.server -d web 8000; fi
     ;;
-  *) echo "Aufruf: ./run.sh [serve|sync|export|stats]"; exit 1 ;;
+  *) echo "Usage: ./run.sh [serve|sync|bootstrap|export|stats|test]"; exit 1 ;;
 esac

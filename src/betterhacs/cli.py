@@ -37,6 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     p_hl = sub.add_parser("history-load", help="Historie aus den Tagesscheiben aufbauen")
     p_hl.add_argument("--dir", default="data/snapshots")
 
+    p_bs = sub.add_parser(
+        "bootstrap-stars",
+        help="One-time: fetch the full star history for every repository (~30-90 min)",
+    )
+    p_bs.add_argument("--dir", default="data/stars")
+    p_bs.add_argument("--limit", type=int, help="only the first N repositories (for testing)")
+    p_bs.add_argument("--delay", type=float, default=0.0, help="seconds between page requests")
+    p_bs.add_argument("--api-base", help="override the API base (used by the test suite)")
+
     sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
 
     p_exp = sub.add_parser("export", help="Statische docs/data.json erzeugen")
@@ -79,6 +88,20 @@ def main(argv: list[str] | None = None) -> int:
                 print(write_slice(session, root))
             else:
                 print(json.dumps(load_slices(session, root), indent=2))
+        return 0
+
+    if args.command == "bootstrap-stars":
+        from pathlib import Path as _P
+
+        from .bootstrap import run_bootstrap
+
+        root = _P(args.dir)
+        if not root.is_absolute():
+            from .config import ROOT
+
+            root = ROOT / args.dir
+        print(json.dumps(run_bootstrap(config, root, limit=args.limit,
+                                       delay=args.delay, api_base=args.api_base), indent=2))
         return 0
 
     if args.command == "enrich":
