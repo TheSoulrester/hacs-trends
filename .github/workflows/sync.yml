@@ -20,6 +20,8 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.build.outputs.built }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -50,29 +52,64 @@ jobs:
           hacs-trends refine-releases
 
       - name: Write today's slice and build the page
+        id: build
         run: |
           hacs-trends history-write
           hacs-trends stats
           hacs-trends export --out web/data.json
+          echo "built=true" >> "$GITHUB_OUTPUT"
 
+      # The page is already built at this point. If committing the slice fails, the run
+      # is marked failed so nobody misses it, but the deployment below still happens.
+      # Losing a day of history is bad; shipping no page at all because of it is worse -
+      # and that is what happened on the first run, where a rejected push skipped the
+      # deploy entirely even though the page had been built successfully.
       - name: Commit today's slice
+        id: commit
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/snapshots
           if git diff --cached --quiet; then
             echo "No new slice."
-          else
-            git commit -m "Data: $(date -u +%F)"
-            git push
+            exit 0
           fi
+          git commit -m "Data: $(date -u +%F)"
+
+          # The push races with anyone pushing while the run is in flight - which is
+          # exactly how the first run failed: a commit landed during the ten minutes the
+          # enrichment takes, and the push came back "[rejected] (fetch first)". Rebasing
+          # and retrying handles it. Conflicts are not a real risk: this job only ever
+          # adds a new file under data/snapshots.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) - rebasing onto the current main."
+            git pull --rebase origin main || {
+              echo "::error::Rebase failed. Someone changed data/snapshots in a conflicting way."
+              exit 1
+            }
+          done
+          echo "::error::Could not push the daily slice after three attempts. If this says 403 rather than rejected, set Settings -> Actions -> General -> Workflow permissions to 'Read and write permissions'. The page was still built and deployed."
+          exit 1
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
 
+      - name: Fail the run if the slice was lost
+        if: steps.commit.outcome == 'failure'
+        run: |
+          echo "::error::The page deployed, but today's slice was not committed - see the error above."
+          exit 1
+
   publish:
     needs: collect
+    # Deploy whenever the page was actually built, even if the collect job was marked
+    # failed by a lost slice.
+    if: always() && needs.collect.outputs.built == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
