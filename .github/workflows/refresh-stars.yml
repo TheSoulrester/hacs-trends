@@ -20,6 +20,11 @@ on:
   schedule:
     - cron: "41 3 * * 0"
   workflow_dispatch:
+    inputs:
+      limit:
+        description: "Test run: fetch only this many repositories. Nothing is deleted or committed. Leave empty for the real weekly refresh."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -52,7 +57,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
 
+      # A test run must never touch the committed history. Without this guard, running
+      # with a limit would delete a year of star data and replace it with a handful of
+      # repositories - and then commit that.
+      - name: Test run (a few repositories, nothing deleted or committed)
+        if: inputs.limit != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
+        run: |
+          hacs-trends bootstrap-stars --dir "$RUNNER_TEMP/startest" --limit "${{ inputs.limit }}"
+          echo "Token works. Nothing was written to the repository."
+
       - name: Collect the star history from scratch
+        if: inputs.limit == ''
         env:
           GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
         run: |
@@ -61,6 +78,7 @@ jobs:
           gzip -kf data/stars/star_days.jsonl
 
       - name: Commit the refreshed history
+        if: inputs.limit == ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
