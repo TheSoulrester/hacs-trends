@@ -29,6 +29,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
 
+    p_exp = sub.add_parser("export", help="Statische docs/data.json erzeugen")
+    p_exp.add_argument("--out", help="Zielpfad (Standard: docs/data.json)")
+
     args = parser.parse_args(argv)
     _setup_logging(args.verbose)
     config = load_config()
@@ -46,6 +49,15 @@ def main(argv: list[str] | None = None) -> int:
             )
         result = run_sync(config)
         print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return 0
+
+    if args.command == "export":
+        from pathlib import Path
+
+        from .export import export
+
+        path = export(config, Path(args.out).resolve() if args.out else None)
+        print(path)
         return 0
 
     if args.command == "stats":

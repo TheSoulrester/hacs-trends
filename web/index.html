@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HACS Trends</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --surface-2:#eef1f5;
+  --ink:#0f151c; --ink-2:#48586a; --ink-3:#7b8b9c;
+  --line:#dde3ea; --line-2:#c8d2dc;
+  --accent:#0a6f96; --accent-soft:#e2f0f6;
+  --pos:#1f7a3d; --pos-soft:#e3f3e8;
+  --neg:#a52a2a;
+  --active:#2f8f4e; --quiet:#b8860b; --stale:#c15b1e; --dormant:#a83232; --unknown:#8794a3;
+  --row:56px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1116; --surface:#131a22; --surface-2:#1a232d;
+    --ink:#e8eef4; --ink-2:#9fb0c0; --ink-3:#71828f;
+    --line:#222d38; --line-2:#2f3d4a;
+    --accent:#3aa8d4; --accent-soft:#14313f;
+    --pos:#4cc072; --pos-soft:#123021;
+    --neg:#e06c6c;
+    --active:#4cc072; --quiet:#d9a441; --stale:#e0824a; --dormant:#e06c6c; --unknown:#6f7f8d;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1116; --surface:#131a22; --surface-2:#1a232d;
+  --ink:#e8eef4; --ink-2:#9fb0c0; --ink-3:#71828f;
+  --line:#222d38; --line-2:#2f3d4a;
+  --accent:#3aa8d4; --accent-soft:#14313f;
+  --pos:#4cc072; --pos-soft:#123021;
+  --neg:#e06c6c;
+  --active:#4cc072; --quiet:#d9a441; --stale:#e0824a; --dormant:#e06c6c; --unknown:#6f7f8d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace}
+.num{font-variant-numeric:tabular-nums}
+a{color:inherit}
+
+/* ---------- Kopf ---------- */
+header{border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:30}
+.head-in{max-width:1500px;margin:0 auto;padding:16px 20px 0;display:flex;flex-direction:column;gap:14px}
+.title-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.02em}
+h1 .dim{color:var(--ink-3);font-weight:400}
+.stamp{font-size:11.5px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;
+  font-family:"IBM Plex Mono",monospace;margin-left:auto}
+
+/* Sichten: bewusst getrennte Ranglisten statt eines zusammengerechneten Werts */
+.lenses{display:flex;gap:2px;flex-wrap:wrap}
+.lens{appearance:none;border:1px solid transparent;border-bottom:none;background:none;
+  color:var(--ink-2);font:inherit;font-size:13.5px;padding:9px 15px 10px;cursor:pointer;
+  border-radius:6px 6px 0 0;position:relative;top:1px}
+.lens:hover{color:var(--ink);background:var(--surface-2)}
+.lens[aria-selected="true"]{background:var(--bg);border-color:var(--line);color:var(--ink);font-weight:600}
+.lens[aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;top:-1px;height:2px;background:var(--accent)}
+.lens:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ---------- Steuerung ---------- */
+.controls{max-width:1500px;margin:0 auto;padding:14px 20px 0;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+.search{flex:1 1 260px;max-width:380px;position:relative}
+.search input{width:100%;padding:8px 11px 8px 32px;border:1px solid var(--line-2);border-radius:7px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:13.5px}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-3)}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{appearance:none;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);
+  font:inherit;font-size:12.5px;padding:5px 11px;border-radius:20px;cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.chip .c{font-family:"IBM Plex Mono",monospace;font-size:11px;opacity:.65;margin-left:5px}
+
+/* ---------- Hinweisleiste ---------- */
+.notice{max-width:1500px;margin:14px auto 0;padding:0 20px}
+.notice-in{display:flex;gap:12px;align-items:flex-start;background:var(--surface);
+  border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 7px 7px 0;padding:11px 14px}
+.notice-in p{margin:0;font-size:12.5px;color:var(--ink-2);max-width:78ch}
+.notice-in strong{color:var(--ink);font-weight:600}
+.notice-in .k{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--accent)}
+
+/* ---------- Tabelle ---------- */
+main{max-width:1500px;margin:0 auto;padding:14px 20px 0}
+.tablewrap{border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+.thead{display:grid;border-bottom:1px solid var(--line-2);background:var(--surface-2)}
+.thead button{appearance:none;background:none;border:none;font:inherit;color:var(--ink-2);
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:10px 12px;text-align:left;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.thead button:hover{color:var(--ink)}
+.thead button[data-active="1"]{color:var(--accent)}
+.thead button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.thead .r{justify-content:flex-end;text-align:right}
+.arrow{font-size:9px;opacity:.9}
+.viewport{height:calc(100vh - 340px);min-height:320px;overflow-y:auto;overflow-x:hidden;position:relative}
+.spacer{position:relative;width:100%}
+.row{display:grid;position:absolute;left:0;right:0;height:var(--row);align-items:center;
+  border-bottom:1px solid var(--line);padding:0}
+.row:hover{background:var(--surface-2)}
+.cell{padding:0 12px;overflow:hidden}
+.cell.r{text-align:right}
+.repo{display:flex;flex-direction:column;gap:1px;min-width:0}
+.repo .top{display:flex;align-items:baseline;gap:7px;min-width:0}
+.repo a{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:500;color:var(--ink);
+  text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.repo a:hover{color:var(--accent);text-decoration:underline}
+.repo .name{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1}
+.repo .desc{font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.03em;color:var(--ink-2);
+  background:var(--surface-2);border:1px solid var(--line);padding:2px 7px;border-radius:4px;white-space:nowrap}
+.v{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-family:"IBM Plex Mono",monospace}
+.delta{font-weight:600}
+.delta.p{color:var(--pos)}
+.delta.n{color:var(--neg)}
+/* Ein fehlender Wert ist nicht null - er ist unbekannt, und sieht auch so aus. */
+.na{color:var(--ink-3);opacity:.55}
+.amb{color:var(--quiet);font-size:11px;margin-left:3px;cursor:help}
+
+.health{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.h-active .dot{background:var(--active)} .h-active{color:var(--active)}
+.h-quiet .dot{background:var(--quiet)} .h-quiet{color:var(--quiet)}
+.h-stale .dot{background:var(--stale)} .h-stale{color:var(--stale)}
+.h-dormant .dot{background:var(--dormant)} .h-dormant{color:var(--dormant)}
+.h-archived .dot{background:var(--dormant)} .h-archived{color:var(--dormant)}
+.h-unknown .dot{background:var(--unknown)} .h-unknown{color:var(--unknown)}
+.age{color:var(--ink-2);font-size:12px}
+
+.foot{max-width:1500px;margin:0 auto;padding:10px 20px 28px;display:flex;flex-wrap:wrap;
+  gap:6px 18px;font-size:12px;color:var(--ink-3);align-items:baseline}
+.foot .count{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.foot a{color:var(--accent)}
+.empty{padding:60px 20px;text-align:center;color:var(--ink-3);font-size:14px}
+
+@media (max-width:1100px){
+  .hide-md{display:none !important}
+  .viewport{height:calc(100vh - 360px)}
+}
+@media (max-width:760px){
+  .hide-sm{display:none !important}
+  .repo .desc{display:none}
+  :root{--row:50px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-in">
+    <div class="title-row">
+      <h1>HACS Trends <span class="dim" id="repo-count"></span></h1>
+      <div class="stamp" id="stamp"></div>
+    </div>
+    <div class="lenses" role="tablist" id="lenses"></div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+      <circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path>
+    </svg>
+    <input id="q" type="search" placeholder="Name, Beschreibung oder Domain suchen" autocomplete="off">
+  </div>
+  <div class="chips" id="cats"></div>
+  <div class="chips" id="healths"></div>
+</div>
+
+<div class="notice"><div class="notice-in" id="notice"></div></div>
+
+<main>
+  <div class="tablewrap">
+    <div class="thead" id="thead"></div>
+    <div class="viewport" id="viewport"><div class="spacer" id="spacer"></div></div>
+  </div>
+</main>
+
+<div class="foot" id="foot"></div>
+
+<script id="inline-data" type="application/json"></script>
+<script>
+(function(){
+"use strict";
+
+const NF = new Intl.NumberFormat("de-DE");
+const fmt = n => (n === undefined || n === null) ? null : NF.format(n);
+
+const CATS = {
+  integration:"Integration", plugin:"Dashboard", theme:"Theme",
+  template:"Template", python_script:"Python-Skript",
+  appdaemon:"AppDaemon", netdaemon:"NetDaemon"
+};
+const HEALTH = {
+  active:{label:"aktiv"}, quiet:{label:"ruhig"}, stale:{label:"lange still"},
+  dormant:{label:"sehr lange still"}, archived:{label:"archiviert"},
+  gone:{label:"nicht erreichbar"}, unknown:{label:"unbekannt"}
+};
+
+// Die vier Sichten. Bewusst getrennt: ein zusammengerechneter Wert aus Sternen,
+// Installationen und Downloads wuerde eine Objektivitaet vortaeuschen, die er nicht hat.
+const LENSES = {
+  stars:{
+    label:"Sterne-Trend", sort:"d7", dir:-1,
+    cols:["repo","cat","s","d7","d30","inst","health"],
+    note: m => m.history_days < 8
+      ? {t:"Trendspalten brauchen Historie.", b:`Der erste Snapshot ist vom <span class="k">${m.first_snapshot}</span>. Die Spalte <strong>+7 Tage</strong> fuellt sich ab <span class="k">${addDays(m.first_snapshot,7)}</span>, <strong>+30 Tage</strong> ab <span class="k">${addDays(m.first_snapshot,30)}</span>. Bis dahin steht dort ein Strich statt einer Null - unbekannt ist nicht dasselbe wie keine Veraenderung. Sortiert wird solange nach Sternen gesamt.`}
+      : {t:"Sortiert nach neuen Sternen der letzten 7 Tage.", b:`Referenztage: <span class="k">${m.reference_days["7"]||"-"}</span> und <span class="k">${m.reference_days["30"]||"-"}</span>.`}
+  },
+  installs:{
+    label:"Verbreitung", sort:"inst", dir:-1, filter:r=>r.inst!==undefined,
+    cols:["repo","cat","inst","i7","s","health"],
+    note: m => ({t:"Tatsaechlich laufende Installationen aus der Home-Assistant-Analytik.",
+      b:`Opt-in-Stichprobe, keine Absolutzahlen - gut fuer die Rangfolge, nicht fuer Aussagen wie "hat genau N Nutzer". Gibt es nur fuer Integrationen: <strong>${fmt(m.analytics.matched)}</strong> von <strong>${fmt(m.analytics.repos_with_domain)}</strong> Repos mit Domain sind zugeordnet. ${m.analytics.ambiguous_domains} Domains werden von mehreren Repos beansprucht und sind mit <span class="amb">&#9888;</span> markiert.`})
+  },
+  health:{
+    label:"Wartungszustand", sort:"age", dir:-1,
+    cols:["repo","cat","health","s","inst","v"],
+    note: m => ({t:"Ein Hinweis zum Nachschauen, kein Qualitaetsurteil.",
+      b:`Eine kleine, fertige Integration fuer ein Geraet mit stabiler API kann jahrelang ohne Commit korrekt laufen. Nur <strong>archiviert</strong> ist eine harte Aussage, alles andere ist Alter und sonst nichts. Gemessen ueber alle Repos: Median <strong>${m.activity_percentiles.p50} Tage</strong> seit dem letzten Update, ein Zehntel liegt ueber <strong>${m.activity_percentiles.p90} Tagen</strong>.${m.enriched?"":" <em>Noch auf Basis von last_updated - nach der GitHub-Anreicherung wird auf das echte Commit-Datum umgestellt.</em>"}`})
+  },
+  neu:{
+    label:"Neu in HACS", sort:"fs", dir:-1,
+    cols:["repo","cat","s","inst","health"],
+    note: m => m.history_days < 2
+      ? {t:"Diese Sicht braucht mindestens zwei Laeufe.", b:`Beim ersten Sync wurden alle <strong>${fmt(m.counts.repos)}</strong> Repos gleichzeitig erstmals erfasst, sie haben deshalb alle dasselbe Aufnahmedatum. Ab dem naechsten Lauf zeigt diese Liste echte Neuzugaenge.`}
+      : {t:"Zuletzt neu im HACS-Store aufgenommen.", b:"Aufnahmedatum ist der Tag, an dem das Repo hier erstmals gesehen wurde."}
+  }
+};
+
+const COLS = {
+  repo:  {h:"Repository", w:"minmax(260px,3fr)", sort:"n", cls:""},
+  cat:   {h:"Kategorie", w:"128px", sort:"c", cls:"hide-sm"},
+  s:     {h:"Sterne", w:"84px", sort:"s", right:true},
+  d7:    {h:"+7 Tage", w:"88px", sort:"d7", right:true},
+  d30:   {h:"+30 Tage", w:"92px", sort:"d30", right:true, cls:"hide-md"},
+  inst:  {h:"Installationen", w:"124px", sort:"inst", right:true, cls:"hide-sm"},
+  i7:    {h:"+7 Tage", w:"92px", sort:"i7", right:true},
+  v:     {h:"Version", w:"110px", sort:"v", cls:"hide-md"},
+  health:{h:"Letztes Update", w:"172px", sort:"age"}
+};
+
+function addDays(iso, n){
+  const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n);
+  return d.toISOString().slice(0,10);
+}
+
+// ---- Zustand -------------------------------------------------------------
+let DATA=null, ROWS=[], VIEW=[], lens="stars", sortKey=null, sortDir=-1;
+let query="", cat=null, health=null;
+
+const $ = id => document.getElementById(id);
+const viewport=$("viewport"), spacer=$("spacer");
+
+function gridTemplate(cols){
+  return cols.map(c=>{
+    const d=COLS[c];
+    if(d.cls==="hide-sm" && window.innerWidth<=760) return null;
+    if(d.cls==="hide-md" && window.innerWidth<=1100) return null;
+    return d.w;
+  }).filter(Boolean).join(" ");
+}
+function visibleCols(){
+  return LENSES[lens].cols.filter(c=>{
+    const d=COLS[c];
+    if(d.cls==="hide-sm" && window.innerWidth<=760) return false;
+    if(d.cls==="hide-md" && window.innerWidth<=1100) return false;
+    return true;
+  });
+}
+
+// ---- Filter + Sortierung -------------------------------------------------
+function applyFilters(){
+  const l = LENSES[lens];
+  const q = query.trim().toLowerCase();
+  VIEW = ROWS.filter(r=>{
+    if(l.filter && !l.filter(r)) return false;
+    if(cat && r.c!==cat) return false;
+    if(health && r.h!==health) return false;
+    if(q){
+      if(!(r.n.toLowerCase().includes(q) ||
+           (r.t&&r.t.toLowerCase().includes(q)) ||
+           (r.d&&r.d.toLowerCase().includes(q)) ||
+           (r.dom&&r.dom.toLowerCase().includes(q)))) return false;
+    }
+    return true;
+  });
+  const key = sortKey || l.sort;
+  const dir = sortDir;
+  const str = key==="n"||key==="c"||key==="v";
+  VIEW.sort((a,b)=>{
+    let x=a[key], y=b[key];
+    // Zeilen ohne Wert wandern immer ans Ende, unabhaengig von der Richtung -
+    // sonst fuellt eine Sortierung nach oben die Spitze mit Luecken.
+    const ax=(x===undefined||x===null), ay=(y===undefined||y===null);
+    if(ax&&ay) return (b.s||0)-(a.s||0);
+    if(ax) return 1;
+    if(ay) return -1;
+    if(str) return dir * String(x).localeCompare(String(y), "de");
+    return dir > 0 ? (x - y) : (y - x);
+  });
+  render(); renderFoot();
+}
+
+// ---- Zeilenaufbau --------------------------------------------------------
+function deltaCell(v, pct){
+  if(v===undefined||v===null) return '<span class="na">&ndash;</span>';
+  const cls = v>0?"p":(v<0?"n":"");
+  const sign = v>0?"+":"";
+  const p = (pct!==undefined&&pct!==null) ? ` <span class="v">${pct>0?"+":""}${pct.toFixed(0)}%</span>` : "";
+  return `<span class="delta ${cls} num">${sign}${fmt(v)}</span>${p}`;
+}
+function cellHTML(c, r){
+  switch(c){
+    case "repo": {
+      const short = r.n.split("/")[1] || r.n;
+      const title = r.t || short;
+      return `<div class="repo"><div class="top">
+        <a href="https://github.com/${r.n}" target="_blank" rel="noopener">${esc(title)}</a>
+        <span class="name">${esc(r.n)}</span></div>
+        <div class="desc">${esc(r.d||"")}</div></div>`;
+    }
+    case "cat": return `<span class="cat">${CATS[r.c]||r.c}</span>`;
+    case "s": return r.s===undefined ? '<span class="na">&ndash;</span>' : `<span class="num">${fmt(r.s)}</span>`;
+    case "d7": return deltaCell(r.d7, r.p7);
+    case "d30": return deltaCell(r.d30, r.p30);
+    case "i7": return deltaCell(r.i7);
+    case "inst": {
+      if(r.inst===undefined) return '<span class="na">&ndash;</span>';
+      const a = r.amb ? '<span class="amb" title="Diese Domain wird von mehreren HACS-Repos beansprucht - die Zahl ist nicht eindeutig zuordenbar">&#9888;</span>' : "";
+      return `<span class="num">${fmt(r.inst)}</span>${a}`;
+    }
+    case "v": return `<span class="v">${esc(r.v||"&ndash;")}</span>`;
+    case "health": {
+      const h = HEALTH[r.h]||HEALTH.unknown;
+      const age = r.age!==undefined ? `<span class="age num">${fmt(r.age)} T</span>` : "";
+      return `<span class="health h-${r.h}" title="${r.lu?("letztes Update "+r.lu):"kein Datum"}">
+        <span class="dot"></span>${h.label}</span> ${age}`;
+    }
+  }
+  return "";
+}
+const ESC={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"};
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>ESC[c]); }
+
+// ---- Fenster-Rendering ---------------------------------------------------
+const ROWH = () => window.innerWidth<=760 ? 50 : 56;
+let pool=[];
+function render(){
+  const cols = visibleCols();
+  const tpl = gridTemplate(LENSES[lens].cols);
+  const h = ROWH();
+  spacer.style.height = (VIEW.length*h)+"px";
+
+  if(!VIEW.length){
+    spacer.innerHTML = '<div class="empty">Keine Treffer. Suche oder Filter anpassen.</div>';
+    pool=[]; return;
+  }
+  const top = viewport.scrollTop;
+  const first = Math.max(0, Math.floor(top/h)-4);
+  const last  = Math.min(VIEW.length, Math.ceil((top+viewport.clientHeight)/h)+4);
+  const need = last-first;
+
+  while(pool.length<need){
+    const d=document.createElement("div"); d.className="row";
+    spacer.appendChild(d); pool.push(d);
+  }
+  for(let i=0;i<pool.length;i++){
+    const el=pool[i];
+    if(i>=need){ el.style.display="none"; continue; }
+    const r=VIEW[first+i];
+    el.style.display=""; el.style.top=((first+i)*h)+"px";
+    el.style.gridTemplateColumns=tpl;
+    el.innerHTML = cols.map(c=>{
+      const d=COLS[c];
+      return `<div class="cell ${d.right?"r":""}">${cellHTML(c,r)}</div>`;
+    }).join("");
+  }
+}
+viewport.addEventListener("scroll", render, {passive:true});
+window.addEventListener("resize", ()=>{buildHead();render();});
+
+// ---- Kopfzeile der Tabelle ----------------------------------------------
+function buildHead(){
+  const cols = visibleCols();
+  const thead=$("thead");
+  thead.style.gridTemplateColumns = gridTemplate(LENSES[lens].cols);
+  const active = sortKey || LENSES[lens].sort;
+  thead.innerHTML = cols.map(c=>{
+    const d=COLS[c];
+    const on = d.sort===active;
+    const arrow = on ? `<span class="arrow">${sortDir<0?"▼":"▲"}</span>` : "";
+    return `<button data-sort="${d.sort}" data-active="${on?1:0}" class="${d.right?"r":""}">${d.h}${arrow}</button>`;
+  }).join("");
+  thead.querySelectorAll("button").forEach(b=>{
+    b.onclick=()=>{
+      const k=b.dataset.sort;
+      if((sortKey||LENSES[lens].sort)===k) sortDir=-sortDir;
+      else { sortKey=k; sortDir = (k==="n"||k==="c"||k==="v") ? 1 : -1; }
+      buildHead(); applyFilters();
+    };
+  });
+}
+
+// ---- Sichten, Filter, Fusszeile -----------------------------------------
+function buildLenses(){
+  $("lenses").innerHTML = Object.entries(LENSES).map(([k,l])=>
+    `<button class="lens" role="tab" data-lens="${k}" aria-selected="${k===lens}">${l.label}</button>`).join("");
+  $("lenses").querySelectorAll(".lens").forEach(b=>{
+    b.onclick=()=>{
+      lens=b.dataset.lens; sortKey=null; sortDir=-1;
+      buildLenses(); buildHead(); renderNotice(); applyFilters();
+      viewport.scrollTop=0;
+    };
+  });
+}
+function renderNotice(){
+  const n = LENSES[lens].note(DATA.meta);
+  $("notice").innerHTML = `<p><strong>${n.t}</strong> ${n.b}</p>`;
+}
+function buildFilters(){
+  const counts={};
+  ROWS.forEach(r=>counts[r.c]=(counts[r.c]||0)+1);
+  $("cats").innerHTML = `<button class="chip" data-cat="" aria-pressed="${!cat}">Alle</button>` +
+    Object.keys(CATS).filter(c=>counts[c]).map(c=>
+      `<button class="chip" data-cat="${c}" aria-pressed="${cat===c}">${CATS[c]}<span class="c">${counts[c]}</span></button>`).join("");
+  $("cats").querySelectorAll(".chip").forEach(b=>{
+    b.onclick=()=>{ cat=b.dataset.cat||null; buildFilters(); applyFilters(); };
+  });
+
+  const hc={};
+  ROWS.forEach(r=>hc[r.h]=(hc[r.h]||0)+1);
+  $("healths").innerHTML = ["archived","dormant","stale"].filter(h=>hc[h]).map(h=>
+    `<button class="chip" data-health="${h}" aria-pressed="${health===h}">${HEALTH[h].label}<span class="c">${hc[h]}</span></button>`).join("");
+  $("healths").querySelectorAll(".chip").forEach(b=>{
+    b.onclick=()=>{ health = health===b.dataset.health ? null : b.dataset.health; buildFilters(); applyFilters(); };
+  });
+}
+function renderFoot(){
+  const m=DATA.meta, c=m.coverage;
+  $("foot").innerHTML =
+    `<span><span class="count">${fmt(VIEW.length)}</span> von ${fmt(ROWS.length)} Repositories</span>` +
+    `<span>Sternzahl fuer ${fmt(c.with_stars)} (${Math.round(c.with_stars/c.total*100)}%)</span>` +
+    `<span>Download-Zaehler nur fuer ${fmt(c.with_downloads)} (${Math.round(c.with_downloads/c.total*100)}%) - deshalb keine eigene Rangliste</span>` +
+    `<span>Quellen: HACS, Home-Assistant-Analytik, GitHub</span>` +
+    `<span>Kein offizielles HACS-Projekt.</span>`;
+}
+
+// ---- Start ---------------------------------------------------------------
+function boot(data){
+  DATA=data; ROWS=data.repos;
+  $("repo-count").textContent = fmt(ROWS.length) + " Repositories";
+  const d = new Date(data.meta.generated_at);
+  $("stamp").textContent = "Stand " + d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+  buildLenses(); buildHead(); buildFilters(); renderNotice(); applyFilters();
+  $("q").addEventListener("input", e=>{ query=e.target.value; applyFilters(); viewport.scrollTop=0; });
+}
+const inline = document.getElementById("inline-data").textContent.trim();
+if(inline){ boot(JSON.parse(inline)); }
+else {
+  fetch("./data.json").then(r=>r.json()).then(boot).catch(e=>{
+    document.getElementById("spacer").innerHTML =
+      '<div class="empty">data.json konnte nicht geladen werden. Erst <code>betterhacs export</code> ausfuehren.</div>';
+  });
+}
+})();
+</script>
+</body>
+</html>
