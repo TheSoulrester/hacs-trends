@@ -27,6 +27,16 @@ def main(argv: list[str] | None = None) -> int:
     p_sync = sub.add_parser("sync", help="HACS-Datensatz und HA-Analytik einlesen")
     p_sync.add_argument("--fixtures", help="Verzeichnis mit heruntergeladenen JSON-Fixtures")
 
+    p_en = sub.add_parser("enrich", help="GitHub-Felder nachladen (pushed_at, archiviert, Release)")
+    p_en.add_argument("--limit", type=int, help="nur die ersten N Repos (zum Testen)")
+    p_en.add_argument("--batch-size", type=int, default=100)
+
+    p_hw = sub.add_parser("history-write", help="Tagesscheibe der Historie schreiben")
+    p_hw.add_argument("--dir", default="data/snapshots")
+
+    p_hl = sub.add_parser("history-load", help="Historie aus den Tagesscheiben aufbauen")
+    p_hl.add_argument("--dir", default="data/snapshots")
+
     sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
 
     p_exp = sub.add_parser("export", help="Statische docs/data.json erzeugen")
@@ -49,6 +59,32 @@ def main(argv: list[str] | None = None) -> int:
             )
         result = run_sync(config)
         print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return 0
+
+    if args.command in ("history-write", "history-load"):
+        from pathlib import Path
+
+        from .db import make_engine, make_session_factory
+        from .history import load_slices, write_slice
+
+        root = Path(args.dir)
+        if not root.is_absolute():
+            from .config import ROOT
+
+            root = ROOT / args.dir
+        engine = make_engine(config.db_path)
+        Session = make_session_factory(engine)
+        with Session() as session:
+            if args.command == "history-write":
+                print(write_slice(session, root))
+            else:
+                print(json.dumps(load_slices(session, root), indent=2))
+        return 0
+
+    if args.command == "enrich":
+        from .enrich import run_enrich
+
+        print(json.dumps(run_enrich(config, limit=args.limit, batch_size=args.batch_size), indent=2))
         return 0
 
     if args.command == "export":

@@ -91,9 +91,9 @@ def build_payload(session, today: date | None = None) -> dict:
     repos = []
     for r in rows:
         info = gh.get(r.id, {})
-        # Nach der Anreicherung ist pushed_at das bessere Aktivitaetsmass;
-        # vorher bleibt nur last_updated aus dem HACS-Datensatz.
-        activity = info.get("pushed_at") or r.last_updated
+        # last_updated aus HACS ist bereits das echte Commit-Datum (nachgemessen).
+        # pushed_at aus der Anreicherung dient nur als Rueckfallebene.
+        activity = r.last_updated or info.get("pushed_at")
         health, age = classify_health(
             last_activity=activity,
             is_archived=info.get("is_archived"),

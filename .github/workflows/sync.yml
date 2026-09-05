@@ -1,0 +1,89 @@
+name: Daten holen und veröffentlichen
+
+# Zweimal täglich. Nicht öfter: die HACS-Quelle wird von einem Community-Projekt
+# bezahlt, und häufiger als die Quelle selbst aktualisiert bringt ohnehin nichts.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+    - cron: "17 17 * * *"
+  workflow_dispatch:
+    inputs:
+      skip_enrich:
+        description: "GitHub-Anreicherung überspringen"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # zum Committen der Tagesscheibe
+  pages: write
+  id-token: write
+
+# Zwei gleichzeitige Läufe würden sich beim Commit der Tagesscheibe in die Quere kommen.
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten
+        run: pip install --quiet -e .
+
+      # Die Datenbank ist nur ein Cache. Die Wahrheit sind die Tagesscheiben im Repo,
+      # aus denen sie bei jedem Lauf neu entsteht.
+      - name: Historie aus den Tagesscheiben aufbauen
+        run: betterhacs history-load
+
+      - name: HACS-Datensatz und HA-Analytik holen
+        run: betterhacs sync
+
+      # Liefert vor allem isArchived, das es sonst nirgends gibt.
+      # Das automatische Token reicht: rund 45 Abfragen bei 1.000 pro Stunde.
+      - name: GitHub-Anreicherung
+        if: ${{ !inputs.skip_enrich }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: betterhacs enrich
+
+      - name: Tagesscheibe schreiben
+        run: betterhacs history-write
+
+      - name: Kennzahlen
+        run: betterhacs stats
+
+      - name: Seite bauen
+        run: betterhacs export --out web/data.json
+
+      - name: Tagesscheibe committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshots
+          if git diff --cached --quiet; then
+            echo "Keine neue Tagesscheibe — nichts zu committen."
+          else
+            git commit -m "Daten: Stand $(date -u +%F)"
+            git push
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

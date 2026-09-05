@@ -50,8 +50,14 @@ class Repo(Base):
 
 
 class RepoGithub(Base):
-    """Anreicherung über die GitHub-GraphQL-API. Liefert die Felder, die HACS nicht hat —
-    vor allem pushed_at (echtes Commit-Datum) und is_archived."""
+    """Anreicherung über die GitHub-GraphQL-API. Liefert die Felder, die HACS nicht hat.
+
+    pushed_at wird hier zwar mitgeführt, ist aber redundant: eine Stichprobe gegen die
+    GitHub-API hat gezeigt, dass HACS' last_updated sekundengenau pushed_at entspricht.
+    Der Wert bleibt als Kontrolle stehen — weicht er ab, hat sich an der HACS-Quelle
+    etwas geändert. Der eigentliche Gewinn dieses Schritts ist is_archived, das es
+    sonst nirgends gibt, und released_at.
+    """
 
     __tablename__ = "repo_github"
 

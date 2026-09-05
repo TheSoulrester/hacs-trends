@@ -109,8 +109,9 @@ Liefert die Felder, die HACS **nicht** hat und die für die Wartungs-Ampel entsc
 
 | Feld | Warum |
 |---|---|
-| `isArchived` | Stärkstes Verwaisungs-Signal überhaupt. Fehlt sonst komplett. |
-| `pushedAt` | Echtes Datum des letzten Commits. `last_updated` aus HACS ist GitHubs `updated_at` und ändert sich auch bei reinen Metadaten-Änderungen — als Aktivitätsmaß unsauber. |
+| `isArchived` | Stärkstes Verwaisungs-Signal überhaupt, fehlt in den HACS-Daten komplett. **Nach dem Wegfall von `pushedAt` der eigentliche Grund für diesen Schritt.** |
+| ~~`pushedAt`~~ | **Nicht nötig — Annahme widerlegt.** Der Entwurf ging davon aus, `last_updated` sei GitHubs `updated_at` und damit als Aktivitätsmaß untauglich. Eine Stichprobe von 45 Repos gegen die GitHub-API zeigt: HACS liefert dort bereits exakt `pushed_at`, sekundengenau (geprüft u.a. an `rospogrigio/localtuya`: HACS `2026-01-29T11:04:59Z`, GitHub `pushed_at` identisch, `updated_at` dagegen `2026-09-04`). Die Ampel steht also von Anfang an auf echten Commit-Daten. |
+| `latestRelease.publishedAt` | HACS liefert die Versionsnummer, aber kein Release-Datum. Erst damit lässt sich Release-Alter von Commit-Alter trennen — ein Repo, das committet aber seit zwei Jahren nichts veröffentlicht, ist ein eigener Fall. |
 | `latestRelease { publishedAt, tagName }` | Release-Alter getrennt von Commit-Alter. |
 | `licenseInfo`, `forkCount`, `primaryLanguage` | Kontext, günstig mitzunehmen. |
 | `isFork`, `nameWithOwner` | Umbenennungen und Forks erkennen. |

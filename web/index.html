@@ -224,7 +224,7 @@ const LENSES = {
     label:"Wartungszustand", sort:"age", dir:-1,
     cols:["repo","cat","health","s","inst","v"],
     note: m => ({t:"Ein Hinweis zum Nachschauen, kein Qualitaetsurteil.",
-      b:`Eine kleine, fertige Integration fuer ein Geraet mit stabiler API kann jahrelang ohne Commit korrekt laufen. Nur <strong>archiviert</strong> ist eine harte Aussage, alles andere ist Alter und sonst nichts. Gemessen ueber alle Repos: Median <strong>${m.activity_percentiles.p50} Tage</strong> seit dem letzten Update, ein Zehntel liegt ueber <strong>${m.activity_percentiles.p90} Tagen</strong>.${m.enriched?"":" <em>Noch auf Basis von last_updated - nach der GitHub-Anreicherung wird auf das echte Commit-Datum umgestellt.</em>"}`})
+      b:`Eine kleine, fertige Integration fuer ein Geraet mit stabiler API kann jahrelang ohne Commit korrekt laufen. Nur <strong>archiviert</strong> ist eine harte Aussage, alles andere ist Alter und sonst nichts. Gemessen ueber alle Repos: Median <strong>${m.activity_percentiles.p50} Tage</strong> seit dem letzten Update, ein Zehntel liegt ueber <strong>${m.activity_percentiles.p90} Tagen</strong>.${m.enriched?"":" <em>Archivierte Repositories sind noch nicht markiert - das kommt aus der GitHub-Anreicherung.</em>"}`})
   },
   neu:{
     label:"Neu in HACS", sort:"fs", dir:-1,
