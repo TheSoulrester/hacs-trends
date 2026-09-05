@@ -1,0 +1,95 @@
+{
+  "meta.language": "Deutsch",
+  "meta.locale": "de",
+
+  "app.title": "HACS Trends",
+  "app.tagline": "Welche Home-Assistant-Erweiterungen gerade zulegen — und welche verlassen wirken.",
+  "app.updated": "Stand {date}",
+  "app.repoCount": "{n} Repositories",
+  "app.notOfficial": "Kein offizielles HACS-Projekt.",
+  "app.sources": "Quellen: HACS, Home-Assistant-Analytik, GitHub",
+
+  "nav.heading": "Was möchtest du finden?",
+
+  "view.trending.title": "Bekommt gerade Aufmerksamkeit",
+  "view.trending.help": "Die Repositories mit den meisten neuen Sternen im gewählten Zeitraum.",
+  "view.trending.note": "Sterne messen Sichtbarkeit, nicht Nutzung. Viele Leute sternen ein Projekt, das sie nie installieren — die Sicht {installed} ist das Gegengewicht.",
+
+  "view.installed.title": "Wird tatsächlich benutzt",
+  "view.installed.help": "Sortiert danach, auf wie vielen Home-Assistant-Installationen es wirklich läuft.",
+  "view.installed.note": "Aus der freiwilligen Home-Assistant-Analytik, also eine große Stichprobe und keine Vollerhebung — gut für die Rangfolge, nicht für die Aussage „hat genau N Nutzer“. Nur Integrationen: Dashboard-Karten, Themes und Templates werden dort nicht erfasst. Zugeordnet sind {matched} von {withDomain} Integrationen.",
+
+  "view.breakout.title": "Wächst am schnellsten für seine Größe",
+  "view.breakout.help": "Wachstum in Prozent, damit kleine Projekte nicht unter den großen verschwinden.",
+  "view.breakout.note": "Repositories mit weniger als {minBase} Sternen zu Beginn des Zeitraums bleiben außen vor. Der Median über ganz HACS liegt bei {median} Sternen — ohne diese Untergrenze bestünde die Liste ausschließlich aus Projekten, die von 2 auf 4 Sterne gewachsen sind.",
+
+  "view.momentum.title": "Echtes Momentum",
+  "view.momentum.help": "Stark in beidem: gewinnt Sterne und gewinnt Installationen.",
+  "view.momentum.note": "Sortiert nach dem Perzentil beider Raten, wobei jeder Teilrang in einer eigenen Spalte steht — die Platzierung ist nie eine Blackbox. Nur Integrationen, und Repositories, deren Domain von mehreren Projekten beansprucht wird, bleiben außen vor, statt auf einer mehrdeutigen Zahl einsortiert zu werden.",
+
+  "view.maintenance.title": "Möglicherweise nicht mehr gepflegt",
+  "view.maintenance.help": "Sortiert danach, wie lange der letzte Commit her ist.",
+  "view.maintenance.note": "Ein Hinweis zum Nachschauen, kein Urteil. Eine kleine, fertige Integration für ein Gerät mit stabiler Schnittstelle kann jahrelang ohne Commit korrekt laufen. Nur {archived} ist eine harte Aussage. Über ganz HACS liegt der Median bei {median} Tagen seit dem letzten Commit, ein Zehntel liegt jenseits von {p90} Tagen.",
+
+  "view.new.title": "Neu in HACS",
+  "view.new.help": "Kürzlich in den HACS-Store aufgenommen.",
+  "view.new.note": "Beruht darauf, wann ein Repository zum ersten Mal in unserer eigenen Erhebung auftauchte, wird also ab dem zweiten Tageslauf aussagekräftig.",
+
+  "window.label": "Zeitraum",
+  "window.7": "7 Tage",
+  "window.30": "30 Tage",
+  "window.90": "Quartal",
+  "window.365": "Jahr",
+  "window.all": "Gesamt",
+  "window.unavailableFrom": "Verfügbar ab {date}",
+  "window.starsExact": "Die Sternwerte sind für jeden Zeitraum exakt — die vollständige Historie wurde einmalig bei GitHub abgeholt.",
+  "window.installsGrowing": "Installations- und Download-Trends müssen sich erst aufbauen. Sie beginnen am {date}.",
+
+  "filter.searchPlaceholder": "Name, Autor, Beschreibung oder Domain suchen",
+  "filter.allCategories": "Alle",
+  "filter.clear": "Filter zurücksetzen",
+
+  "cat.integration": "Integration",
+  "cat.plugin": "Dashboard-Karte",
+  "cat.theme": "Theme",
+  "cat.template": "Template",
+  "cat.python_script": "Python-Skript",
+  "cat.appdaemon": "AppDaemon",
+  "cat.netdaemon": "NetDaemon",
+
+  "col.repository": "Repository",
+  "col.category": "Art",
+  "col.stars": "Sterne",
+  "col.starsGained": "Neue Sterne",
+  "col.growth": "Wachstum",
+  "col.installs": "Installationen",
+  "col.installsGained": "Neue Inst.",
+  "col.downloads": "Downloads",
+  "col.lastCommit": "Letzter Commit",
+  "col.version": "Version",
+  "col.added": "Aufgenommen",
+  "col.starRank": "Rang Sterne",
+  "col.installRank": "Rang Inst.",
+
+  "health.active": "aktiv",
+  "health.quiet": "ruhig",
+  "health.stale": "lange still",
+  "health.dormant": "sehr lange still",
+  "health.archived": "archiviert",
+  "health.gone": "nicht erreichbar",
+  "health.unknown": "unbekannt",
+  "health.days": "{n} T",
+
+  "hint.noValue": "Kein Wert verfügbar",
+  "hint.ambiguousDomain": "Mehrere HACS-Repositories beanspruchen diese Integrations-Domain, die Installationszahl lässt sich deshalb keinem davon eindeutig zuordnen.",
+  "hint.noDownloadCounter": "Dieses Repository liefert ohne Release-Dateien aus, GitHub führt deshalb keinen Download-Zähler. Das ist nicht dasselbe wie null Downloads.",
+  "hint.starsAdded": "Im Zeitraum vergebene Sterne. GitHub meldet keine entfernten Sterne, das ist also keine Netto-Änderung.",
+
+  "foot.showing": "{shown} von {total} Repositories",
+  "foot.starCoverage": "Sternzahl für {n} ({pct} %)",
+  "foot.downloadCoverage": "Download-Zähler nur für {n} ({pct} %) — zu lückenhaft für eine eigene Rangliste",
+  "foot.empty": "Keine Treffer. Andere Suche versuchen oder Filter zurücksetzen.",
+  "foot.translate": "Diese Seite übersetzen",
+
+  "lang.label": "Sprache"
+}

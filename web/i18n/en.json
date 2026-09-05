@@ -1,0 +1,95 @@
+{
+  "meta.language": "English",
+  "meta.locale": "en",
+
+  "app.title": "HACS Trends",
+  "app.tagline": "Which Home Assistant custom repositories are gaining ground — and which look abandoned.",
+  "app.updated": "Updated {date}",
+  "app.repoCount": "{n} repositories",
+  "app.notOfficial": "Not an official HACS project.",
+  "app.sources": "Sources: HACS, Home Assistant analytics, GitHub",
+
+  "nav.heading": "What would you like to find?",
+
+  "view.trending.title": "Gaining attention",
+  "view.trending.help": "Repositories picking up the most new stars in the selected period.",
+  "view.trending.note": "Stars measure visibility, not use. Plenty of people star a project they never install — the {installed} view is the counterweight.",
+
+  "view.installed.title": "Actually being used",
+  "view.installed.help": "Ranked by how many Home Assistant installations are really running them.",
+  "view.installed.note": "From opt-in Home Assistant analytics, so a large sample rather than a headcount — good for ranking, not for claiming exact user numbers. Integrations only: dashboard cards, themes and templates are not reported. {matched} of {withDomain} integrations are matched.",
+
+  "view.breakout.title": "Rising fastest for their size",
+  "view.breakout.help": "Growth in percent, so small projects are not buried under the big ones.",
+  "view.breakout.note": "Repositories below {minBase} stars at the start of the period are excluded. The median across HACS is {median} stars — without a floor this list would be nothing but projects that went from 2 stars to 4.",
+
+  "view.momentum.title": "Real momentum",
+  "view.momentum.help": "Strong on both counts: gaining stars and gaining installations.",
+  "view.momentum.note": "Ranked on the percentile of both rates, with each component rank shown in its own column — the placement is never a black box. Integrations only, and repositories whose domain is claimed by several projects are excluded rather than ranked on an ambiguous number.",
+
+  "view.maintenance.title": "Possibly unmaintained",
+  "view.maintenance.help": "Sorted by how long ago the last commit was.",
+  "view.maintenance.note": "A prompt to look, not a verdict. A small, finished integration for a device with a stable API can be correct for years without a commit. Only {archived} is a hard statement. Across HACS the median is {median} days since the last commit; a tenth are past {p90} days.",
+
+  "view.new.title": "New in HACS",
+  "view.new.help": "Recently accepted into the HACS store.",
+  "view.new.note": "Based on when a repository first appeared in our own collection, so this becomes meaningful from the second daily run onwards.",
+
+  "window.label": "Period",
+  "window.7": "7 days",
+  "window.30": "30 days",
+  "window.90": "Quarter",
+  "window.365": "Year",
+  "window.all": "All time",
+  "window.unavailableFrom": "Available from {date}",
+  "window.starsExact": "Star figures are exact for every period — the full history was collected once from GitHub.",
+  "window.installsGrowing": "Installation and download trends have to build up over time. They start from {date}.",
+
+  "filter.searchPlaceholder": "Search name, author, description or domain",
+  "filter.allCategories": "All",
+  "filter.clear": "Reset filters",
+
+  "cat.integration": "Integration",
+  "cat.plugin": "Dashboard card",
+  "cat.theme": "Theme",
+  "cat.template": "Template",
+  "cat.python_script": "Python script",
+  "cat.appdaemon": "AppDaemon",
+  "cat.netdaemon": "NetDaemon",
+
+  "col.repository": "Repository",
+  "col.category": "Type",
+  "col.stars": "Stars",
+  "col.starsGained": "New stars",
+  "col.growth": "Growth",
+  "col.installs": "Installations",
+  "col.installsGained": "New installs",
+  "col.downloads": "Downloads",
+  "col.lastCommit": "Last commit",
+  "col.version": "Version",
+  "col.added": "Added",
+  "col.starRank": "Star rank",
+  "col.installRank": "Install rank",
+
+  "health.active": "active",
+  "health.quiet": "quiet",
+  "health.stale": "long quiet",
+  "health.dormant": "very long quiet",
+  "health.archived": "archived",
+  "health.gone": "unreachable",
+  "health.unknown": "unknown",
+  "health.days": "{n} d",
+
+  "hint.noValue": "No figure available",
+  "hint.ambiguousDomain": "Several HACS repositories claim this integration domain, so the installation figure cannot be attributed to one of them.",
+  "hint.noDownloadCounter": "This repository ships without release files, so GitHub reports no download counter. That is not the same as zero downloads.",
+  "hint.starsAdded": "Stars given during the period. GitHub does not report removed stars, so this is not a net change.",
+
+  "foot.showing": "{shown} of {total} repositories",
+  "foot.starCoverage": "Star figures for {n} ({pct}%)",
+  "foot.downloadCoverage": "Download counter for only {n} ({pct}%) — too sparse for a ranking of its own",
+  "foot.empty": "Nothing matches. Try a different search or clear the filters.",
+  "foot.translate": "Translate this page",
+
+  "lang.label": "Language"
+}
