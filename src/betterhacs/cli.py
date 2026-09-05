@@ -50,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     p_bs.add_argument("--limit", type=int, help="only the first N repositories (for testing)")
     p_bs.add_argument("--delay", type=float, default=0.0, help="seconds between page requests")
     p_bs.add_argument("--weeks", type=int, help="weeks of history per repo (0 = since creation)")
+    p_bs.add_argument("--changed-only", action="store_true",
+                      help="only repositories whose star count moved since the last sync")
     p_bs.add_argument("--api-base", help="override the API base (used by the test suite)")
 
     p_sl = sub.add_parser("load-stars", help="Load the bootstrap output into star_daily")
@@ -135,7 +137,8 @@ def main(argv: list[str] | None = None) -> int:
 
             root = ROOT / args.dir
         print(json.dumps(run_bootstrap(config, root, limit=args.limit, delay=args.delay,
-                                       weeks=args.weeks, api_base=args.api_base), indent=2))
+                                       weeks=args.weeks, changed_only=args.changed_only,
+                                       api_base=args.api_base), indent=2))
         return 0
 
     if args.command == "refine-releases":

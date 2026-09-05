@@ -1,76 +1,66 @@
-name: Daten holen und veröffentlichen
+name: Collect and publish
 
-# Zweimal täglich. Nicht öfter: die HACS-Quelle wird von einem Community-Projekt
-# bezahlt, und häufiger als die Quelle selbst aktualisiert bringt ohnehin nichts.
+# Twice a day. Not more: the HACS endpoint is paid for by a community project, and
+# publishing more often than the source updates gains nothing.
 on:
   schedule:
-    - cron: "17 5 * * *"
-    - cron: "17 17 * * *"
+    - cron: "23 5 * * *"
+    - cron: "23 17 * * *"
   workflow_dispatch:
-    inputs:
-      skip_enrich:
-        description: "GitHub-Anreicherung überspringen"
-        type: boolean
-        default: false
 
 permissions:
-  contents: write   # zum Committen der Tagesscheibe
+  contents: write   # to commit the daily slice
   pages: write
   id-token: write
 
-# Zwei gleichzeitige Läufe würden sich beim Commit der Tagesscheibe in die Quere kommen.
 concurrency:
-  group: sync
+  group: data
   cancel-in-progress: false
 
 jobs:
-  build:
+  collect:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+      - run: pip install --quiet -e .
 
-      - name: Abhängigkeiten
-        run: pip install --quiet -e .
+      # The database is a cache. What is committed - the daily slices and the one-time
+      # star bootstrap - is the truth, and it is rebuilt from them on every run.
+      - name: Rebuild history from the committed slices
+        run: |
+          betterhacs history-load
+          betterhacs load-stars
 
-      # Die Datenbank ist nur ein Cache. Die Wahrheit sind die Tagesscheiben im Repo,
-      # aus denen sie bei jedem Lauf neu entsteht.
-      - name: Historie aus den Tagesscheiben aufbauen
-        run: betterhacs history-load
-
-      - name: HACS-Datensatz und HA-Analytik holen
+      - name: Fetch HACS data and Home Assistant analytics
         run: betterhacs sync
 
-      # Liefert vor allem isArchived, das es sonst nirgends gibt.
-      # Das automatische Token reicht: rund 45 Abfragen bei 1.000 pro Stunde.
-      - name: GitHub-Anreicherung
-        if: ${{ !inputs.skip_enrich }}
+      # The automatic token is enough: about 90 queries at one rate-limit point each.
+      - name: Enrich from GitHub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: betterhacs enrich
+        run: |
+          betterhacs enrich
+          betterhacs refine-releases
 
-      - name: Tagesscheibe schreiben
-        run: betterhacs history-write
+      - name: Write today's slice and build the page
+        run: |
+          betterhacs history-write
+          betterhacs stats
+          betterhacs export --out web/data.json
 
-      - name: Kennzahlen
-        run: betterhacs stats
-
-      - name: Seite bauen
-        run: betterhacs export --out web/data.json
-
-      - name: Tagesscheibe committen
+      - name: Commit today's slice
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/snapshots
           if git diff --cached --quiet; then
-            echo "Keine neue Tagesscheibe — nichts zu committen."
+            echo "No new slice."
           else
-            git commit -m "Daten: Stand $(date -u +%F)"
+            git commit -m "Data: $(date -u +%F)"
             git push
           fi
 
@@ -78,8 +68,8 @@ jobs:
         with:
           path: web
 
-  deploy:
-    needs: build
+  publish:
+    needs: collect
     runs-on: ubuntu-latest
     environment:
       name: github-pages

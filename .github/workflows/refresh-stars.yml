@@ -1,0 +1,73 @@
+name: Refresh star history
+
+# Weekly, and it needs saying why it is separate from the daily job.
+#
+# GitHub's /stargazers/history endpoint returns exact daily star counts back to a
+# repository's creation, which is what makes the quarter and year windows possible at
+# all. Reading 60 weeks for all 4,193 repositories is about 8,400 requests - fine as a
+# weekly job, far too slow to sit in front of every daily collection.
+#
+# In between, the 7- and 30-day windows are covered by our own daily slices, and the
+# quarter and year windows are at most a week stale. That trade is stated on the page
+# rather than hidden.
+#
+# This needs a personal access token: the automatic one is capped at 1,000 requests an
+# hour, which would stretch the job across nine hours. A classic token with NO scopes
+# ticked is enough - everything read here is public, the token only lifts the limit to
+# 5,000 an hour. Store it as the STAR_HISTORY_TOKEN secret. Without it the job stops
+# with a clear message instead of running for hours and failing.
+on:
+  schedule:
+    - cron: "41 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install --quiet -e .
+
+      - name: Check for the token
+        run: |
+          if [ -z "${{ secrets.STAR_HISTORY_TOKEN }}" ]; then
+            echo "::error::STAR_HISTORY_TOKEN is not set. See the comment at the top of this workflow."
+            exit 1
+          fi
+
+      - name: Rebuild the repository list
+        run: betterhacs sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
+
+      - name: Collect the star history from scratch
+        env:
+          GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
+        run: |
+          rm -f data/stars/star_days.jsonl data/stars/star_days.jsonl.gz data/stars/progress.jsonl
+          betterhacs bootstrap-stars
+          gzip -kf data/stars/star_days.jsonl
+
+      - name: Commit the refreshed history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/stars/star_days.jsonl.gz
+          if git diff --cached --quiet; then
+            echo "Unchanged."
+          else
+            git commit -m "Star history refreshed: $(date -u +%F)"
+            git push
+          fi

@@ -28,12 +28,31 @@ log = logging.getLogger(__name__)
 WINDOWS = (7, 30, 90, 365)
 
 
+def _open_any(path: Path):
+    """Open a .jsonl or the gzipped .jsonl.gz beside it.
+
+    The bootstrap is committed compressed - 1.7 MB of JSON Lines becomes 281 KB, and it
+    is written once and read on every run.
+    """
+    import gzip
+
+    if path.is_file():
+        return path.open()
+    gz = path.with_suffix(path.suffix + ".gz")
+    if gz.is_file():
+        return gzip.open(gz, "rt")
+    raise FileNotFoundError(
+        f"Neither {path} nor {gz} found — run 'betterhacs bootstrap-stars' first."
+    )
+
+
 def load_bootstrap(session, path: Path) -> dict:
-    """Load data/stars/star_days.jsonl into star_daily. Safe to re-run."""
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"{path} not found — run 'betterhacs bootstrap-stars' first."
-        )
+    """Load the star history into star_daily. Safe to re-run.
+
+    Reads every record; where a repository appears more than once - the one-time
+    bootstrap plus a later partial refresh - the later record wins, because the daily
+    refresh carries fresher counts for the days it covers.
+    """
 
     known = {rid for (rid,) in session.execute(select(Repo.id))}
     rows: list[dict] = []
@@ -41,7 +60,7 @@ def load_bootstrap(session, path: Path) -> dict:
     skipped_unknown = 0
     total_stars = 0
 
-    with path.open() as fh:
+    with _open_any(path) as fh:
         for line in fh:
             line = line.strip()
             if not line:

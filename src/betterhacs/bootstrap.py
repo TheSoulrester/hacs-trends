@@ -28,6 +28,7 @@ def run_bootstrap(
     limit: int | None = None,
     delay: float = 0.0,
     weeks: int | None = None,
+    changed_only: bool = False,
     api_base: str | None = None,
 ) -> dict:
     if not config.has_token:
@@ -43,6 +44,43 @@ def run_bootstrap(
     with Session() as session:
         rows = session.execute(select(Repo.id, Repo.full_name).order_by(Repo.id)).all()
     repos = [(r.id, r.full_name) for r in rows]
+
+    if changed_only:
+        # The daily run does not need to re-read 4,193 histories. HACS gives us each
+        # repository's current star count, so only those whose count moved since the
+        # last snapshot can have new days to fetch - roughly 400-700 a day against
+        # 4,193, which is the difference between a 35-minute job and a 5-minute one.
+        from sqlalchemy import func
+
+        from .db import Snapshot
+
+        days = sorted(session.scalars(select(Snapshot.day).distinct()))
+        if len(days) >= 2:
+            today, prev = days[-1], days[-2]
+            now_stars = dict(
+                session.execute(
+                    select(Snapshot.repo_id, Snapshot.stars).where(Snapshot.day == today)
+                )
+            )
+            then_stars = dict(
+                session.execute(
+                    select(Snapshot.repo_id, Snapshot.stars).where(Snapshot.day == prev)
+                )
+            )
+            moved = {
+                rid
+                for rid, val in now_stars.items()
+                if val is not None and then_stars.get(rid) != val
+            }
+            before = len(repos)
+            repos = [r for r in repos if r[0] in moved]
+            log.info(
+                "Only repositories whose star count moved since %s: %d of %d",
+                prev, len(repos), before,
+            )
+        else:
+            log.info("Not enough history to tell what moved - fetching everything")
+
     if limit:
         repos = repos[:limit]
     if not repos:

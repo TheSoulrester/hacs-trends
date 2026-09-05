@@ -1,8 +1,9 @@
 [project]
 name = "betterhacs"
 version = "0.1.0"
-description = "Trend- und Wartungs-Dashboard für HACS-Repositories"
+description = "Trend and maintenance dashboard for HACS repositories"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27",
