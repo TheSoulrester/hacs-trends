@@ -55,6 +55,11 @@ def load_bootstrap(session, path: Path) -> dict:
     """
 
     known = {rid for (rid,) in session.execute(select(Repo.id))}
+    if not known:
+        raise SystemExit(
+            "The repository list is empty. Run 'betterhacs sync' first — star history "
+            "attaches to repositories, so the list has to exist before it can be loaded."
+        )
     rows: list[dict] = []
     repos = 0
     skipped_unknown = 0

@@ -83,8 +83,16 @@ def load_slices(session, root: Path) -> dict:
     if not root.is_dir():
         return {"slices": 0, "rows": 0}
 
+    known = {rid for (rid,) in session.execute(select(Repo.id))}
+    if not known:
+        raise SystemExit(
+            "The repository list is empty. Run 'betterhacs sync' first — history attaches "
+            "to repositories, so the list has to exist before the slices can be loaded."
+        )
+
     files = sorted(root.glob("*.json.gz"))
     rows = 0
+    skipped = 0
     first_seen: dict[int, date] = {}
 
     for path in files:
@@ -98,6 +106,12 @@ def load_slices(session, root: Path) -> dict:
 
         batch = []
         for rid, stars, downloads, issues in payload["repos"]:
+            if rid not in known:
+                # A repository that has since left HACS. Its history stays in the slice
+                # files - that is the point of keeping them - but there is nothing to
+                # attach it to today.
+                skipped += 1
+                continue
             first_seen.setdefault(rid, day)
             batch.append(
                 {
@@ -136,8 +150,7 @@ def load_slices(session, root: Path) -> dict:
             )
     session.commit()
 
-    # first_seen aus der Zugehoerigkeit ableiten, nicht speichern.
-    known = {rid for (rid,) in session.execute(select(Repo.id))}
+    # first_seen is derived from slice membership, never stored - so it cannot drift.
     for rid, day in first_seen.items():
         if rid in known:
             session.execute(
@@ -145,8 +158,11 @@ def load_slices(session, root: Path) -> dict:
             )
     session.commit()
 
-    log.info("Historie geladen: %d Tagesscheiben, %d Snapshot-Zeilen", len(files), rows)
-    return {"slices": len(files), "rows": rows}
+    log.info(
+        "History loaded: %d slices, %d snapshot rows, %d rows for repositories no longer in HACS",
+        len(files), rows, skipped,
+    )
+    return {"slices": len(files), "rows": rows, "skipped_gone": skipped}
 
 
 def snapshots_referenced(root: Path) -> list[date]:

@@ -28,15 +28,18 @@ jobs:
           cache: pip
       - run: pip install --quiet -e .
 
-      # The database is a cache. What is committed - the daily slices and the one-time
-      # star bootstrap - is the truth, and it is rebuilt from them on every run.
-      - name: Rebuild history from the committed slices
+      # Order matters and is not obvious: sync builds the repository list, and history
+      # attaches to it by repository id. Loading the slices first fails on a foreign key
+      # against an empty table - which is exactly what a clean-checkout test caught.
+      - name: Fetch HACS data and Home Assistant analytics
+        run: betterhacs sync
+
+      # The database is a cache. What is committed - the daily slices and the star
+      # history - is the truth, and it is rebuilt from them on every run.
+      - name: Rebuild history from the committed files
         run: |
           betterhacs history-load
           betterhacs load-stars
-
-      - name: Fetch HACS data and Home Assistant analytics
-        run: betterhacs sync
 
       # The automatic token is enough: about 90 queries at one rate-limit point each.
       - name: Enrich from GitHub

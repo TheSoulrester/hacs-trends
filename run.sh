@@ -87,6 +87,9 @@ case "${1:-serve}" in
   serve)
     echo "==> Daten holen"
     cmd sync
+    # Order matters: sync builds the repository list, history attaches to it.
+    [ -d data/snapshots ] && cmd history-load || true
+    [ -f data/stars/star_days.jsonl.gz ] && cmd load-stars || true
     echo "==> Export"
     cmd export --out web/data.json
     echo
