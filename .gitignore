@@ -16,3 +16,7 @@ data/fixtures/
 data/stars/*.jsonl
 !data/stars/star_days.jsonl.gz
 data/stars/progress.jsonl
+
+# macOS
+.DS_Store
+**/.DS_Store
