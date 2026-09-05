@@ -69,11 +69,11 @@ var VIEW_ORDER = ["trending", "installed", "breakout", "momentum", "maintenance"
 var COLS = {
   repo:      { w: "minmax(250px,3fr)", i18n: "col.repository", sort: "n", str: true },
   cat:       { w: "132px", i18n: "col.category", sort: "c", str: true, cls: "hide-sm" },
-  stars:     { w: "88px", i18n: "col.stars", sort: "s", right: true },
-  gained:    { w: "104px", i18n: "col.starsGained", sort: function (w) { return "d" + w; }, right: true, win: true },
-  growth:    { w: "96px", i18n: "col.growth", sort: function (w) { return "p" + w; }, right: true, win: true },
-  installs:  { w: "126px", i18n: "col.installs", sort: "inst", right: true, cls: "hide-sm" },
-  instGained:{ w: "108px", i18n: "col.installsGained", sort: function (w) { return "i" + w; }, right: true, win: true, install: true },
+  stars:     { w: "94px", i18n: "col.stars", sort: "s", right: true },
+  gained:    { w: "112px", i18n: "col.starsGained", sort: function (w) { return "d" + w; }, right: true, win: true },
+  growth:    { w: "108px", i18n: "col.growth", sort: function (w) { return "p" + w; }, right: true, win: true },
+  installs:  { w: "138px", i18n: "col.installs", sort: "inst", right: true, cls: "hide-sm" },
+  instGained:{ w: "116px", i18n: "col.installsGained", sort: function (w) { return "i" + w; }, right: true, win: true, install: true },
   version:   { w: "112px", i18n: "col.version", sort: "v", str: true, cls: "hide-md" },
   starRank:  { w: "100px", i18n: "col.starRank", sort: "_srank", right: true },
   instRank:  { w: "104px", i18n: "col.installRank", sort: "_irank", right: true },
@@ -267,8 +267,9 @@ function buildHead() {
     var sub = def.win ? '<span class="sub">' + esc(t("window." + win)) + "</span>" : "";
     return '<button data-k="' + key + '" data-str="' + (def.str ? 1 : 0) + '" data-active="' +
            (on ? 1 : 0) + '" class="' + (def.right ? "r" : "") + '">' +
-           esc(t(def.i18n)) + " " + sub + (on ? '<span class="arrow">' + (sortDir < 0 ? "▼" : "▲") + "</span>" : "") +
-           "</button>";
+           '<span class="lbl">' + esc(t(def.i18n)) +
+           (on ? '<span class="arrow">' + (sortDir < 0 ? "▼" : "▲") + "</span>" : "") +
+           "</span>" + sub + "</button>";
   }).join("");
   th.querySelectorAll("button").forEach(function (b) {
     b.onclick = function () {
@@ -298,7 +299,10 @@ function buildCards() {
 function buildWindows() {
   var v = VIEWS[view];
   var box = $("windows");
-  box.style.display = v.windowed ? "" : "none";
+  /* Hide the label with the control - a lone "Period" caption next to nothing
+     reads like something failed to load. */
+  box.hidden = !v.windowed;
+  $("winlabel").hidden = !v.windowed;
   if (!v.windowed) return;
   box.innerHTML = WINDOWS.map(function (w) {
     return '<button data-w="' + w + '" aria-pressed="' + (w === win) + '"' +
