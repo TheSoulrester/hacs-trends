@@ -151,6 +151,15 @@ def load_github_activity(session) -> dict[int, dict]:
             RepoGithub.unavailable,
             RepoGithub.license_key,
             RepoGithub.fork_count,
+            RepoGithub.releases_year,
+            RepoGithub.releases_year_capped,
+            RepoGithub.releases_total,
+            RepoGithub.commits_year,
+            RepoGithub.commits_quarter,
+            RepoGithub.open_issues_gh,
+            RepoGithub.closed_issues,
+            RepoGithub.created_at,
+            RepoGithub.watchers,
         )
     ).all()
     return {
@@ -161,6 +170,14 @@ def load_github_activity(session) -> dict[int, dict]:
             "unavailable": r.unavailable,
             "license": r.license_key,
             "forks": r.fork_count,
+            "releases_year": r.releases_year,
+            "releases_capped": r.releases_year_capped,
+            "releases_total": r.releases_total,
+            "commits_year": r.commits_year,
+            "commits_quarter": r.commits_quarter,
+            "open_issues": r.open_issues_gh,
+            "closed_issues": r.closed_issues,
+            "created_at": r.created_at,
         }
         for r in rows
     }
@@ -236,3 +253,81 @@ def coverage(session, today: date) -> dict[str, int]:
         .where(Snapshot.day == today, Snapshot.downloads.is_not(None))
     )
     return {"total": total or 0, "with_stars": with_stars or 0, "with_downloads": with_dl or 0}
+
+
+# --- release rhythm --------------------------------------------------------
+# Boundaries from the measured distribution over all 4,193 repositories:
+# median 4 releases a year, P75 13, P90 27; 18.5% published nothing for over a
+# year and 3.1% have never released at all.
+RHYTHM = (
+    (12, "continuous"),
+    (4, "regular"),
+    (1, "occasional"),
+)
+
+
+def release_rhythm(releases_year, released_at, now=None) -> str:
+    """How often a project ships. A description, not a verdict.
+
+    Deliberately separate from the maintenance signal: a project can commit daily and
+    never publish, or publish steadily without much churn. Both are normal.
+    """
+    if released_at is None:
+        return "never"
+    n = releases_year or 0
+    for threshold, label in RHYTHM:
+        if n >= threshold:
+            return label
+    return "dormant"
+
+
+def installs_by_version(session, day):
+    """Raw {domain: {version: installs}} for one day."""
+    from collections import defaultdict
+
+    from .db import InstallVersion
+
+    per_domain = defaultdict(dict)
+    for domain, version, count in session.execute(
+        select(InstallVersion.domain, InstallVersion.version, InstallVersion.count).where(
+            InstallVersion.day == day
+        )
+    ):
+        per_domain[domain][version] = count
+    return per_domain
+
+
+def normalise_version(v):
+    """Strip the decoration projects put around the same number.
+
+    HACS repositories tag every way imaginable, and the analytics key and the release
+    tag for one and the same version routinely differ by a leading v or a suffix.
+    """
+    if not v:
+        return None
+    v = str(v).strip().lstrip("vV")
+    return v or None
+
+
+def adoption_share(versions: dict, latest_version):
+    """Share of installations running the project's newest RELEASE.
+
+    Which version is newest is taken from the repository's own release tag, never
+    inferred from the analytics keys: those include every nightly and CI build anyone
+    ever reported, and picking the numerically largest key reliably selects a dev
+    build with a single install - which is how this first returned 0% for everything.
+
+    Returns None when the release tag does not appear in the analytics data at all.
+    That is genuinely unknown, not zero: it usually means the two sides spell the
+    version differently, and reporting it as 0% would libel a perfectly healthy project.
+    """
+    total = sum(versions.values())
+    if total < 20:
+        return None  # below this the percentage is noise
+    want = normalise_version(latest_version)
+    if not want:
+        return None
+    for key, count in versions.items():
+        if normalise_version(key) == want:
+            return round(count / total * 100, 1)
+    return None

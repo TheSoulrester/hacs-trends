@@ -17,6 +17,9 @@ from .config import Config
 from .db import InstallSnapshot, Repo, Snapshot, make_engine, make_session_factory
 from .metrics import (
     HealthThresholds,
+    adoption_share,
+    installs_by_version,
+    release_rhythm,
     activity_percentiles,
     classify_health,
     compute_install_deltas,
@@ -63,6 +66,7 @@ def build_payload(session, today: date | None = None) -> dict:
     thresholds = HealthThresholds()
     now = datetime.now(timezone.utc)
 
+    versions_today = installs_by_version(session, today)
     installs_today = {
         d: t
         for d, t in session.execute(
@@ -142,8 +146,38 @@ def build_payload(session, today: date | None = None) -> dict:
         if age is not None:
             item["age"] = age
         item["h"] = health
+
+        # --- release rhythm and activity ---------------------------------
+        ry = info.get("releases_year")
+        if ry is not None:
+            item["ry"] = ry
+            if info.get("releases_capped"):
+                item["ryc"] = 1
+        if info.get("commits_year") is not None:
+            item["cy"] = info["commits_year"]
+        if info.get("commits_quarter"):
+            item["cq"] = info["commits_quarter"]
+        rel_at = info.get("released_at")
+        if rel_at:
+            item["rd"] = _iso_day(rel_at)
+            item["ra"] = (now - (rel_at.replace(tzinfo=timezone.utc)
+                                 if rel_at.tzinfo is None else rel_at)).days
+        item["rh"] = release_rhythm(ry, rel_at, now)
+        if info.get("forks"):
+            item["fk"] = info["forks"]
+        if info.get("open_issues") is not None:
+            item["oi2"] = info["open_issues"]
+        if info.get("license"):
+            item["lic"] = info["license"]
+        if info.get("is_archived"):
+            item["arch"] = 1
         if r.domain:
             item["dom"] = r.domain
+            versions = versions_today.get(r.domain)
+            if versions:
+                share = adoption_share(versions, r.last_version or info.get("latest_tag"))
+                if share is not None:
+                    item["va"] = share
         if inst is not None:
             item["inst"] = inst
             if dom_entry and dom_entry[1]:
@@ -208,6 +242,7 @@ def build_payload(session, today: date | None = None) -> dict:
             "stale": thresholds.stale,
         },
         "enriched": bool(gh),
+        "adoption_domains": len(versions_today),
         "counts": {"repos": len(repos)},
     }
     return {"meta": meta, "repos": repos}
