@@ -87,6 +87,7 @@ class RepoGithub(Base):
     releases_total: Mapped[int | None] = mapped_column(Integer)
     releases_year: Mapped[int | None] = mapped_column(Integer)
     releases_quarter: Mapped[int | None] = mapped_column(Integer)
+    releases_year_capped: Mapped[bool | None] = mapped_column(Boolean)
     uses_prerelease: Mapped[bool | None] = mapped_column(Boolean)
 
     commits_year: Mapped[int | None] = mapped_column(Integer)
@@ -267,7 +268,44 @@ def make_engine(db_path, echo: bool = False):
         cur.close()
 
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
     return engine
+
+
+def _add_missing_columns(engine) -> None:
+    """Add columns that exist in the models but not yet in the file.
+
+    create_all() only creates missing TABLES; it never touches an existing one. So
+    every new field silently failed on any database created before it - the collector
+    would run, hit "no such column" on the first write, and lose the batch. SQLite
+    supports ADD COLUMN, which is enough for a schema that only ever grows.
+
+    Anything beyond added columns (a renamed or retyped one) is out of scope on
+    purpose: it would need a table rebuild, and pretending to handle it here would
+    hide a real migration problem rather than solve it.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                ddl = column.type.compile(engine.dialect)
+                # A NOT NULL column cannot be added without a default; those are all
+                # primary keys here, which only appear on new tables anyway.
+                null = "" if column.nullable else " NOT NULL DEFAULT 0"
+                conn.execute(
+                    text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {ddl}{null}')
+                )
+                log.info("schema: added %s.%s", table.name, column.name)
+
+
+log = __import__("logging").getLogger(__name__)
 
 
 def make_session_factory(engine):

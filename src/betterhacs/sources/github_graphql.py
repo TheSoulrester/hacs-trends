@@ -34,10 +34,13 @@ log = logging.getLogger(__name__)
 # 100 per query makes GitHub return 502 once releases and commit histories are in it.
 BATCH = 50
 MAX_RETRIES = 4
-# Enough to characterise the rhythm without inflating node count.
+# Enough to characterise the rhythm without inflating node count. Repositories that
+# reach this ceiling are re-queried with DEEP_RELEASE_NODES, because a block of ties at
+# the cap is not a ranking - see refine_releases in enrich.py.
 RELEASE_NODES = 30
+DEEP_RELEASE_NODES = 100
 
-FRAGMENT = """
+_FRAGMENT_TMPL = """
 fragment repoFields on Repository {
   databaseId
   nameWithOwner
@@ -53,20 +56,20 @@ fragment repoFields on Repository {
   licenseInfo { key }
   openIssues: issues(states: OPEN) { totalCount }
   closedIssues: issues(states: CLOSED) { totalCount }
-  releases(first: %d, orderBy: {field: CREATED_AT, direction: DESC}) {
+  releases(first: %(nodes)d, orderBy: {field: CREATED_AT, direction: DESC}) {
     totalCount
     nodes { publishedAt tagName isPrerelease }
   }
   defaultBranchRef {
     target {
       ... on Commit {
-        year: history(since: "%%(year)s") { totalCount }
-        quarter: history(since: "%%(quarter)s") { totalCount }
+        year: history(since: "%(year)s") { totalCount }
+        quarter: history(since: "%(quarter)s") { totalCount }
       }
     }
   }
 }
-""" % RELEASE_NODES
+"""
 
 
 @dataclass
@@ -80,6 +83,7 @@ class GithubRepo:
     releases_total: int | None = None
     releases_year: int | None = None
     releases_quarter: int | None = None
+    releases_year_capped: bool | None = None
     uses_prerelease: bool | None = None
     commits_year: int | None = None
     commits_quarter: int | None = None
@@ -117,8 +121,9 @@ def _dt(value):
         return None
 
 
-def _build_query(pairs, now: datetime) -> str:
-    frag = FRAGMENT % {
+def _build_query(pairs, now: datetime, nodes: int = RELEASE_NODES) -> str:
+    frag = _FRAGMENT_TMPL % {
+        "nodes": nodes,
         "year": (now - timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "quarter": (now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
@@ -169,17 +174,20 @@ def _post(client: httpx.Client, query: str) -> dict:
     raise SourceError("GraphQL did not succeed after several attempts")
 
 
-def _parse(node: dict, repo_id: int, full_name: str, now: datetime) -> GithubRepo:
+def _parse(node: dict, repo_id: int, full_name: str, now: datetime,
+           nodes_requested: int = RELEASE_NODES) -> GithubRepo:
     rel = node.get("releases") or {}
     nodes = [n for n in (rel.get("nodes") or []) if n and n.get("publishedAt")]
     dates = sorted((_dt(n["publishedAt"]) for n in nodes), reverse=True)
 
     year_cut = now - timedelta(days=365)
     quarter_cut = now - timedelta(days=90)
-    # A floor, not an exact count: if all RELEASE_NODES fall inside the year the true
-    # number is higher. Fine for ranking rhythm, and never presented as exact.
     releases_year = sum(1 for d in dates if d >= year_cut)
     releases_quarter = sum(1 for d in dates if d >= quarter_cut)
+    # When every fetched release falls inside the year, the real number is higher and
+    # this is only a floor. Recorded so the interface can show "100+" instead of a
+    # number it cannot stand behind.
+    releases_year_capped = releases_year >= nodes_requested
 
     target = (node.get("defaultBranchRef") or {}).get("target") or {}
     lic = node.get("licenseInfo") or {}
@@ -195,6 +203,7 @@ def _parse(node: dict, repo_id: int, full_name: str, now: datetime) -> GithubRep
         releases_total=rel.get("totalCount"),
         releases_year=releases_year,
         releases_quarter=releases_quarter,
+        releases_year_capped=releases_year_capped,
         uses_prerelease=any(n.get("isPrerelease") for n in nodes) if nodes else None,
         commits_year=(target.get("year") or {}).get("totalCount"),
         commits_quarter=(target.get("quarter") or {}).get("totalCount"),
@@ -211,7 +220,8 @@ def _parse(node: dict, repo_id: int, full_name: str, now: datetime) -> GithubRep
     )
 
 
-def enrich(repos, token: str, *, batch_size: int = BATCH, progress=None):
+def enrich(repos, token: str, *, batch_size: int = BATCH, progress=None,
+           release_nodes: int = RELEASE_NODES):
     """repos: list of (hacs_repo_id, "owner/name")."""
     report = EnrichReport(requested=len(repos))
     out: list[GithubRepo] = []
@@ -239,7 +249,7 @@ def enrich(repos, token: str, *, batch_size: int = BATCH, progress=None):
                 continue
 
             try:
-                body = _post(client, _build_query(pairs, now))
+                body = _post(client, _build_query(pairs, now, release_nodes))
             except SourceError as exc:
                 # A batch can be too heavy for GitHub to answer in time - repositories
                 # with tens of thousands of issues make the whole query time out at 504.
@@ -258,7 +268,8 @@ def enrich(repos, token: str, *, batch_size: int = BATCH, progress=None):
                 log.warning("Batch of %d failed (%s) - splitting", len(valid),
                             str(exc)[:80])
                 for half in (valid[:mid], valid[mid:]):
-                    sub, sub_report = enrich(half, token, batch_size=len(half))
+                    sub, sub_report = enrich(half, token, batch_size=len(half),
+                                             release_nodes=release_nodes)
                     out.extend(sub)
                     report.resolved += sub_report.resolved
                     report.unavailable += sub_report.unavailable
@@ -288,7 +299,7 @@ def enrich(repos, token: str, *, batch_size: int = BATCH, progress=None):
                     )
                     report.unavailable += 1
                     continue
-                parsed = _parse(node, rid, full_name, now)
+                parsed = _parse(node, rid, full_name, now, release_nodes)
                 if parsed.name_with_owner and parsed.name_with_owner.lower() != full_name.lower():
                     report.renamed += 1
                 out.append(parsed)

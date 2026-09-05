@@ -55,6 +55,12 @@ def main(argv: list[str] | None = None) -> int:
     p_sl = sub.add_parser("load-stars", help="Load the bootstrap output into star_daily")
     p_sl.add_argument("--dir", default="data/stars")
 
+    p_rr = sub.add_parser(
+        "refine-releases",
+        help="Second pass for repositories that hit the release fetch ceiling",
+    )
+    p_rr.add_argument("--batch-size", type=int, default=25)
+
     sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
 
     p_exp = sub.add_parser("export", help="Statische docs/data.json erzeugen")
@@ -130,6 +136,12 @@ def main(argv: list[str] | None = None) -> int:
             root = ROOT / args.dir
         print(json.dumps(run_bootstrap(config, root, limit=args.limit, delay=args.delay,
                                        weeks=args.weeks, api_base=args.api_base), indent=2))
+        return 0
+
+    if args.command == "refine-releases":
+        from .enrich import refine_releases
+
+        print(json.dumps(refine_releases(config, batch_size=args.batch_size), indent=2))
         return 0
 
     if args.command == "enrich":

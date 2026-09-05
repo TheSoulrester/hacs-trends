@@ -12,13 +12,14 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from .config import Config
 from .db import Repo, RepoGithub, SyncRun, make_engine, make_session_factory, utcnow
+from .sources.github_graphql import DEEP_RELEASE_NODES, RELEASE_NODES
 from .sources.github_graphql import enrich as gql_enrich
 
 log = logging.getLogger(__name__)
 
 # Columns written back; kept in one place so the insert and the conflict-update
 # can never drift apart.
-FIELDS = ('name_with_owner', 'created_at', 'pushed_at', 'released_at', 'latest_tag', 'releases_total', 'releases_year', 'releases_quarter', 'uses_prerelease', 'commits_year', 'commits_quarter', 'is_archived', 'is_fork', 'is_disabled', 'license_key', 'fork_count', 'watchers', 'open_issues_gh', 'closed_issues', 'primary_language', 'homepage', 'unavailable')
+FIELDS = ('name_with_owner', 'created_at', 'pushed_at', 'released_at', 'latest_tag', 'releases_total', 'releases_year', 'releases_quarter', 'releases_year_capped', 'uses_prerelease', 'commits_year', 'commits_quarter', 'is_archived', 'is_fork', 'is_disabled', 'license_key', 'fork_count', 'watchers', 'open_issues_gh', 'closed_issues', 'primary_language', 'homepage', 'unavailable')
 
 
 def run_enrich(config: Config, *, limit: int | None = None, batch_size: int = 50,
@@ -118,3 +119,71 @@ def run_enrich(config: Config, *, limit: int | None = None, batch_size: int = 50
 
     counts["duration_s"] = round(time.monotonic() - started, 1)
     return counts
+
+
+def refine_releases(config: Config, *, batch_size: int = 25) -> dict:
+    """Second pass for repositories whose release count hit the fetch ceiling.
+
+    The first pass asks for 30 releases, which is plenty to characterise most projects
+    but leaves the busiest ones as a block of ties at exactly 30 - and a block of ties
+    is not a ranking. This re-queries only those, asking for 100. Anything still at the
+    ceiling keeps its capped flag, and the interface shows "100+" rather than a number
+    that would be wrong.
+
+    Roughly 1,100 repositories qualify, so about 45 queries.
+    """
+    if not config.has_token:
+        raise SystemExit("No GITHUB_TOKEN set.")
+
+    engine = make_engine(config.db_path)
+    Session = make_session_factory(engine)
+    started = time.monotonic()
+
+    with Session() as session:
+        rows = session.execute(
+            select(Repo.id, Repo.full_name)
+            .join(RepoGithub, RepoGithub.repo_id == Repo.id)
+            .where(RepoGithub.releases_year >= RELEASE_NODES)
+            .order_by(Repo.id)
+        ).all()
+        targets = [(r.id, r.full_name) for r in rows]
+        if not targets:
+            return {"targets": 0, "note": "nothing at the ceiling"}
+        log.info("Refining %d repositories that hit the %d-release ceiling",
+                 len(targets), RELEASE_NODES)
+
+        resolved = queries = cost = 0
+        still_capped = 0
+        for offset in range(0, len(targets), 250):
+            part = targets[offset : offset + 250]
+            results, report = gql_enrich(
+                part, config.github_token, batch_size=batch_size,
+                release_nodes=DEEP_RELEASE_NODES,
+            )
+            now = utcnow()
+            payload = [
+                {**{f: getattr(g, f) for f in FIELDS}, "repo_id": g.repo_id,
+                 "fetched_at": now}
+                for g in results
+            ]
+            still_capped += sum(1 for g in results if g.releases_year_capped)
+            for i in range(0, len(payload), 500):
+                chunk = payload[i : i + 500]
+                stmt = sqlite_insert(RepoGithub).values(chunk)
+                session.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=[RepoGithub.repo_id],
+                        set_={c: getattr(stmt.excluded, c) for c in FIELDS + ("fetched_at",)},
+                    )
+                )
+            session.commit()
+            resolved += report.resolved
+            queries += report.queries
+            cost += report.cost
+            log.info("refined %d/%d", min(offset + 250, len(targets)), len(targets))
+
+    return {
+        "targets": len(targets), "resolved": resolved, "queries": queries,
+        "cost_points": cost, "still_capped_at_100": still_capped,
+        "duration_s": round(time.monotonic() - started, 1),
+    }
