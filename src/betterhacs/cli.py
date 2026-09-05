@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_en = sub.add_parser("enrich", help="GitHub-Felder nachladen (pushed_at, archiviert, Release)")
     p_en.add_argument("--limit", type=int, help="nur die ersten N Repos (zum Testen)")
-    p_en.add_argument("--batch-size", type=int, default=100)
+    p_en.add_argument("--batch-size", type=int, default=50)
 
     p_hw = sub.add_parser("history-write", help="Tagesscheibe der Historie schreiben")
     p_hw.add_argument("--dir", default="data/snapshots")

@@ -307,3 +307,70 @@ unchanged.
   a stable API can be correct for years without a commit. Labelling it as a problem
   drives users away from working software. The wording is a prompt to look, never a
   verdict, and `isArchived` and HACS removal are the only statements presented as facts.
+
+---
+
+## 11. Decisions taken, and what the enrichment measured
+
+### Settled
+
+- **Interface direction C** — dark, left rail with icons, a four-figure summary strip
+  above the table. Chosen from three drafts.
+- **A seventh view, "Ships reliably"**, ranked on releases in the last year, plus a
+  release-rhythm column in every view. Verified to be worth having: of the top 30 by
+  30-day star growth and the top 30 by release activity, **only 5 repositories appear
+  in both**. A view sorted on raw commit freshness would have been a near-duplicate of
+  Trending — young growing projects commit daily — which is why it is release rhythm
+  and not commit count.
+- **Collect everything**: release rhythm, commit activity, version adoption, issue
+  balance, forks, licence, age. The full enrichment costs **84 rate-limit points of
+  5,000 per hour** — measured, one point per 50-repository query.
+
+### What the corpus actually looks like (4,193 repositories, enriched)
+
+| Release rhythm | | |
+|---|---|---|
+| continuous, 12+ releases a year | 1,147 | 27.4% |
+| regular, 4–11 a year | 1,162 | 27.7% |
+| occasional, 1–3 a year | 978 | 23.3% |
+| nothing for over a year | 775 | 18.5% |
+| no release at all | 131 | 3.1% |
+
+Median releases in a year: 4. Median days since the last release: 86 (P75 245, P90 722).
+Median commits in a year: 25 — and a quarter of the corpus manages four or fewer.
+Archived: 1. Gone from GitHub: 16. Forks: 133. Without a licence: 548.
+
+### Measured corrections to earlier assumptions
+
+- **`releases(last: N)` returns the OLDEST releases.** GitHub orders the connection
+  descending by creation, so `last` takes the tail. Caught on
+  `robinostlund/homeassistant-volkswagencarnet`, where the "latest" three came back as
+  v4.4.5–v4.4.7 from June 2020 against a real newest of v5.5.1 from August 2026. Every
+  query now orders explicitly. Left unnoticed this would have produced a complete,
+  plausible and entirely wrong cadence table.
+- **Median gap between releases is not a usable cadence measure.** It reads 5 days
+  across the corpus, which sounds like everything ships weekly. The last 15 releases of
+  any project cluster tightly even when the whole block is two years old — a repository
+  that released fifteen times in one month in 2023 scores a one-day cadence. Releases
+  within the last year plus the age of the newest are what get stored instead.
+- **Watchers are too sparse to rank on.** Median 1, P90 8. Dropped as a signal.
+- **"Commits but never releases" is rare** — 7 of 611 in the sample. Worth a note on a
+  repository page, worthless as a metric.
+- **A 100-repository GraphQL batch times out** (502, and 504 on heavy repositories).
+  Fifty works; the collector halves a failing batch and retries rather than losing it.
+
+### Known defect, not yet fixed
+
+`releases_year` **saturates at 30** because only 30 release nodes are fetched. The top
+of the "Ships reliably" ranking is therefore all ties at 30, decided by the commit
+tiebreaker rather than by releases. Fix: a second pass fetching 100 nodes for the ~1,147
+repositories that hit the ceiling (~23 queries), and display anything still at the
+ceiling as "100+" rather than as an exact number.
+
+### Still open
+
+- Which GitHub account and repository name the project lives under.
+- Whether the Internet Archive holds enough captures of the analytics file to backfill
+  installation history.
+- Sparkline payload size — estimated, never measured.
+- 773 repositories gained no stars at all in 60 weeks. Worth surfacing as its own fact.
