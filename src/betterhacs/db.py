@@ -131,6 +131,26 @@ class StarEvent(Base):
     starred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
 
 
+class StarDaily(Base):
+    """Stars gained per repository per day, from the bootstrap.
+
+    Note what this counts: stars *added* on that day. Removed stars are invisible —
+    GitHub's history endpoint reports additions, not net change. So a window sum is
+    "stars given during this period", which is very slightly different from "change in
+    the star count". Both are legitimate; this one is stated so nobody has to guess.
+
+    Having this makes the whole reference-snapshot machinery unnecessary for stars: a
+    7-day delta is a sum over seven rows, not a comparison against a snapshot that may
+    or may not exist at the right date.
+    """
+
+    __tablename__ = "star_daily"
+
+    repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    added: Mapped[int] = mapped_column(Integer)
+
+
 class BootstrapState(Base):
     """Fortschritt des Stern-Bootstraps, damit der Lauf nach einem Rate-Limit-Stopp
     oder Abbruch dort weitermacht, wo er aufgehört hat."""

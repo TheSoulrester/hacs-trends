@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     p_bs.add_argument("--weeks", type=int, help="weeks of history per repo (0 = since creation)")
     p_bs.add_argument("--api-base", help="override the API base (used by the test suite)")
 
+    p_sl = sub.add_parser("load-stars", help="Load the bootstrap output into star_daily")
+    p_sl.add_argument("--dir", default="data/stars")
+
     sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
 
     p_exp = sub.add_parser("export", help="Statische docs/data.json erzeugen")
@@ -94,6 +97,25 @@ def main(argv: list[str] | None = None) -> int:
                 print(write_slice(session, root))
             else:
                 print(json.dumps(load_slices(session, root), indent=2))
+        return 0
+
+    if args.command == "load-stars":
+        from pathlib import Path as _P
+
+        from .db import make_engine, make_session_factory
+        from .star_history import coverage, load_bootstrap
+
+        root = _P(args.dir)
+        if not root.is_absolute():
+            from .config import ROOT
+
+            root = ROOT / args.dir
+        engine = make_engine(config.db_path)
+        Session = make_session_factory(engine)
+        with Session() as session:
+            stats = load_bootstrap(session, root / "star_days.jsonl")
+            stats.update(coverage(session))
+        print(json.dumps(stats, indent=2))
         return 0
 
     if args.command == "bootstrap-stars":

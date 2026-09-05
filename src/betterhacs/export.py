@@ -26,8 +26,15 @@ from .metrics import (
     snapshot_days,
 )
 from .sources.analytics import map_repos_to_domains
+from .star_history import WINDOWS
+from .star_history import coverage as star_coverage
+from .star_history import window_sums
 
 log = logging.getLogger(__name__)
+
+# Below this many stars at the start of a window, a percentage says more about
+# rounding than about growth. The star median across HACS is 13.
+MIN_PCT_BASE = 25
 
 
 def _iso_day(value) -> str | None:
@@ -43,6 +50,13 @@ def build_payload(session, today: date | None = None) -> dict:
     if today is None:
         raise RuntimeError("Keine Snapshots in der Datenbank — erst 'betterhacs sync' laufen lassen.")
 
+    # Stars come from the bootstrapped history when it is there: an exact sum over
+    # days, with no reference snapshot to pick and no tolerance to apply. Only if the
+    # bootstrap has not run do we fall back to differencing our own snapshots, which
+    # can offer 7 and 30 days at best and only after weeks of collecting.
+    star_hist = star_coverage(session)
+    use_history = star_hist["repos_with_history"] > 0
+    star_windows = window_sums(session, today) if use_history else {}
     star_deltas, star_refs = compute_star_deltas(session, today)
     install_deltas = compute_install_deltas(session, today)
     gh = load_github_activity(session)
@@ -134,7 +148,19 @@ def build_payload(session, today: date | None = None) -> dict:
             item["inst"] = inst
             if dom_entry and dom_entry[1]:
                 item["amb"] = 1  # Domain von mehreren Repos beansprucht
-        if sd:
+        if use_history:
+            for n in WINDOWS:
+                gained = star_windows.get(n, {}).get(r.id)
+                if gained:
+                    item[f"d{n}"] = gained
+                    # Percentage is measured against where the repository stood at the
+                    # start of the window, not where it stands now - otherwise a repo
+                    # that doubled would report 50% growth.
+                    if r.stars is not None:
+                        base = r.stars - gained
+                        if base >= MIN_PCT_BASE:
+                            item[f"p{n}"] = round(gained / base * 100, 1)
+        elif sd:
             for key, val in (("d7", sd.d7), ("d30", sd.d30)):
                 if val is not None:
                     item[key] = val
@@ -166,6 +192,9 @@ def build_payload(session, today: date | None = None) -> dict:
         "history_days": len(days),
         "first_snapshot": days[0].isoformat() if days else None,
         "reference_days": {str(k): (v.isoformat() if v else None) for k, v in star_refs.items()},
+        "star_source": "history" if use_history else "snapshots",
+        "star_windows": list(WINDOWS) if use_history else [7, 30],
+        "star_history": star_hist,
         "coverage": cov,
         "analytics": {
             "matched": ana_report.matched,
