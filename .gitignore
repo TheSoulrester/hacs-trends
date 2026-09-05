@@ -9,6 +9,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 docs/data.json
+web/data.json
 
 # Fixtures sind regenerierbar (siehe README) und mit ~2,6 MB zu gross fuers Repo
 data/fixtures/
