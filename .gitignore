@@ -13,3 +13,4 @@ web/data.json
 
 # Fixtures sind regenerierbar (siehe README) und mit ~2,6 MB zu gross fuers Repo
 data/fixtures/
+data/stars/*.jsonl

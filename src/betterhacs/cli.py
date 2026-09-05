@@ -17,6 +17,11 @@ def _setup_logging(verbose: bool) -> None:
         format="%(asctime)s %(levelname)-7s %(name)-28s %(message)s",
         datefmt="%H:%M:%S",
     )
+    # httpx logs one line per request at INFO. During a bootstrap that is thousands of
+    # lines that bury the progress reports and make a normal run look like a failure.
+    if not verbose:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     p_bs.add_argument("--dir", default="data/stars")
     p_bs.add_argument("--limit", type=int, help="only the first N repositories (for testing)")
     p_bs.add_argument("--delay", type=float, default=0.0, help="seconds between page requests")
+    p_bs.add_argument("--weeks", type=int, help="weeks of history per repo (0 = since creation)")
     p_bs.add_argument("--api-base", help="override the API base (used by the test suite)")
 
     sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
@@ -100,8 +106,8 @@ def main(argv: list[str] | None = None) -> int:
             from .config import ROOT
 
             root = ROOT / args.dir
-        print(json.dumps(run_bootstrap(config, root, limit=args.limit,
-                                       delay=args.delay, api_base=args.api_base), indent=2))
+        print(json.dumps(run_bootstrap(config, root, limit=args.limit, delay=args.delay,
+                                       weeks=args.weeks, api_base=args.api_base), indent=2))
         return 0
 
     if args.command == "enrich":

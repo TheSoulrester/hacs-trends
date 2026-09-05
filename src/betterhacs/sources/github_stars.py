@@ -1,36 +1,45 @@
-"""One-time bootstrap of the full star history.
+"""One-time bootstrap of the star history.
 
-The GitHub REST stargazer endpoint returns the moment each star was given when asked
-with ``Accept: application/vnd.github.v3.star+json``. Paging through it for every HACS
-repository yields the complete star curve — which is what makes the 7-day, 30-day,
-quarter, year and all-time windows exact from day one, instead of only after a year of
-collecting snapshots.
+**A note on why this file was rewritten.** The original version paged through
+``GET /repos/{owner}/{repo}/stargazers`` with the ``star+json`` media type, which used
+to return the moment each individual star was given. On 30 June 2026 GitHub restricted
+that endpoint to a repository's own admins and collaborators, and tokens without scopes
+stopped working on it entirely. It now answers 404 for every repository you do not own —
+not 403, because GitHub does not confirm existence to callers without access. Any tool
+built on it broke overnight, and there is no workaround.
 
-Measured cost: all 4,193 repositories hold 354,357 stars in total, so this is roughly
-7,300 requests — about half an hour at one request per 250 ms, comfortably inside the
-5,000/hour limit of an authenticated token if it pauses when the budget runs low.
+GitHub shipped the replacement on 4 September 2026:
 
-Written to disk as JSON Lines rather than into the database, deliberately:
+    GET /repos/{owner}/{repo}/stargazers/history?per_page=30&page=N
 
-* appending a line is atomic enough to survive a crash or a closed laptop lid, so a
-  run that dies at minute 80 of 90 loses one repository, not everything;
-* resuming needs no state beyond the file itself — whatever is already in there is done;
-* it works on filesystems where SQLite does not (network shares, FUSE mounts);
+It returns weekly buckets, newest first, each with a seven-element ``days`` array — so
+daily resolution, without exposing who starred anything. It works for any public
+repository with an ordinary token, and it goes back to the repository's creation.
+
+Verified against ``hacs/integration``: 14 pages back to its creation week in February
+2019, and the daily values sum to exactly the current star count of 7,684. No drift.
+
+Cost is driven by repository *age* now, not star count: one request per 30 weeks. The
+default depth of 60 weeks covers every window up to a year in at most two requests per
+repository — roughly 8,000 requests for all of HACS. Full history since creation would
+be about 29,000 and is available behind ``--weeks 0`` when it is worth the hours.
+
+Results are written as JSON Lines rather than into the database, deliberately:
+
+* appending a line survives a crash or a closed laptop lid, so a run that dies at minute
+  80 of 90 loses one repository, not everything;
+* resuming needs no state beyond the file itself;
+* it works on filesystems where SQLite does not;
 * and it is the artefact we want to commit anyway.
-
-Star *timestamps* are aggregated to daily counts on the fly. Keeping 354,357 individual
-timestamps would buy nothing: no window in the interface is finer than a day.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import re
 import time
-from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -39,11 +48,14 @@ from ..config import GITHUB_API_BASE, USER_AGENT
 
 log = logging.getLogger(__name__)
 
-PER_PAGE = 100
-STAR_ACCEPT = "application/vnd.github.v3.star+json"
+# The history endpoint caps per_page at 30 weeks and page at 100.
+PER_PAGE = 30
+MAX_PAGE = 100
+API_VERSION = "2026-03-10"
+# 60 weeks covers every window up to a year with margin, in at most two requests.
+DEFAULT_WEEKS = 60
 # Stop and wait rather than burning the last requests and getting a hard block.
 RATE_FLOOR = 60
-_LAST_PAGE = re.compile(r'[?&]page=(\d+)>; rel="last"')
 
 
 @dataclass
@@ -86,18 +98,21 @@ def _load_done(progress_path: Path) -> set[int]:
 
 
 class StarBootstrap:
-    def __init__(self, token: str, out_dir: Path, *, delay: float = 0.0):
+    def __init__(self, token: str, out_dir: Path, *, delay: float = 0.0,
+                 weeks: int = DEFAULT_WEEKS):
         self.out_dir = out_dir
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.progress_path = out_dir / "progress.jsonl"
         self.events_path = out_dir / "star_days.jsonl"
         self.delay = delay
+        self.weeks = weeks
         self.client = httpx.Client(
             base_url=GITHUB_API_BASE,
             timeout=60.0,
             headers={
                 "Authorization": f"Bearer {token}",
-                "Accept": STAR_ACCEPT,
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": API_VERSION,
                 "User-Agent": USER_AGENT,
             },
             follow_redirects=True,
@@ -144,6 +159,14 @@ class StarBootstrap:
             if resp.status_code == 200:
                 self._respect_limits(resp)
                 return resp
+            if resp.status_code == 401:
+                # A revoked or expired token must stop the run, not quietly mark every
+                # remaining repository as unavailable - that would poison the output
+                # with plausible-looking nulls that nobody would notice.
+                raise RuntimeError(
+                    "GitHub rejected the token (401). It was probably revoked or has "
+                    "expired. Fix GITHUB_TOKEN and run again - progress is kept."
+                )
             if resp.status_code in (404, 451):
                 # Deleted, made private, or blocked for legal reasons. A fact, not an error.
                 return None
@@ -167,40 +190,55 @@ class StarBootstrap:
 
     # -- one repository -----------------------------------------------------
     def fetch_repo(self, repo_id: int, full_name: str) -> dict:
-        path = f"/repos/{full_name}/stargazers"
-        counts: Counter[str] = Counter()
+        """Walk the weekly history backwards until the requested depth is covered."""
+        path = f"/repos/{full_name}/stargazers/history"
+        counts: dict[str, int] = {}
+        weeks_seen = 0
+        pages = 0
+        want = self.weeks or (MAX_PAGE * PER_PAGE)  # weeks=0 means everything
 
-        first = self._get(path, {"per_page": PER_PAGE, "page": 1})
-        if first is None:
-            return {"id": repo_id, "full_name": full_name, "unavailable": True}
-
-        last_page = 1
-        link = first.headers.get("link", "")
-        m = _LAST_PAGE.search(link)
-        if m:
-            last_page = int(m.group(1))
-
-        def absorb(resp: httpx.Response) -> None:
-            for entry in resp.json():
-                # With the star media type each entry is {starred_at, user}. Without it
-                # GitHub returns bare user objects — which means the Accept header did
-                # not survive, and the whole run would be silently useless.
-                if not isinstance(entry, dict) or "starred_at" not in entry:
-                    raise RuntimeError(
-                        "Stargazer response has no starred_at. The Accept header "
-                        f"({STAR_ACCEPT}) is not reaching GitHub — aborting rather than "
-                        "collecting unusable data."
-                    )
-                counts[entry["starred_at"][:10]] += 1
-
-        absorb(first)
-        for page in range(2, last_page + 1):
-            if self.delay:
+        for page in range(1, MAX_PAGE + 1):
+            if page > 1 and self.delay:
                 time.sleep(self.delay)
             resp = self._get(path, {"per_page": PER_PAGE, "page": page})
             if resp is None:
+                if page == 1:
+                    return {"id": repo_id, "full_name": full_name, "unavailable": True}
                 break
-            absorb(resp)
+
+            batch = resp.json()
+            if not isinstance(batch, list):
+                raise RuntimeError(
+                    f"{path} did not return a list. The star history endpoint has "
+                    "changed shape — aborting rather than collecting unusable data."
+                )
+            if not batch:
+                break
+            pages += 1
+
+            for bucket in batch:
+                # Guard the contract explicitly. A silent shape change here would
+                # produce an entire run of plausible-looking but wrong numbers.
+                if (
+                    not isinstance(bucket, dict)
+                    or "week" not in bucket
+                    or not isinstance(bucket.get("days"), list)
+                    or len(bucket["days"]) != 7
+                ):
+                    raise RuntimeError(
+                        "Star history bucket is not {week, total, days[7]} as documented: "
+                        f"{str(bucket)[:120]} — aborting."
+                    )
+                week_start = datetime.fromtimestamp(bucket["week"], tz=timezone.utc).date()
+                for offset, n in enumerate(bucket["days"]):
+                    if n:
+                        day = week_start + timedelta(days=offset)
+                        counts[day.isoformat()] = counts.get(day.isoformat(), 0) + int(n)
+                weeks_seen += 1
+
+            # Buckets come newest first, so once we have enough weeks we can stop.
+            if weeks_seen >= want or len(batch) < PER_PAGE:
+                break
 
         total = sum(counts.values())
         self.progress.stars += total
@@ -208,7 +246,8 @@ class StarBootstrap:
             "id": repo_id,
             "full_name": full_name,
             "total": total,
-            "pages": last_page,
+            "pages": pages,
+            "weeks": weeks_seen,
             "days": dict(sorted(counts.items())),
             "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }

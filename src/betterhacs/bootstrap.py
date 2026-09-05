@@ -27,6 +27,7 @@ def run_bootstrap(
     *,
     limit: int | None = None,
     delay: float = 0.0,
+    weeks: int | None = None,
     api_base: str | None = None,
 ) -> dict:
     if not config.has_token:
@@ -47,7 +48,12 @@ def run_bootstrap(
     if not repos:
         raise SystemExit("No repositories in the database — run 'betterhacs sync' first.")
 
-    boot = StarBootstrap(config.github_token, out_dir, delay=delay)
+    from .sources.github_stars import DEFAULT_WEEKS
+
+    boot = StarBootstrap(
+        config.github_token, out_dir, delay=delay,
+        weeks=DEFAULT_WEEKS if weeks is None else weeks,
+    )
     if api_base:
         boot.client.base_url = api_base
 
