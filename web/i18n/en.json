@@ -4,6 +4,7 @@
   "app.title": "HACS Trends",
   "app.repoStamp": "{n} repositories · {date}",
   "app.sources": "HACS · Home Assistant analytics · GitHub",
+  "app.method": "How every figure is produced →",
   "app.notOfficial": "Not an official HACS project",
 
   "view.trending.title": "Gaining attention",
@@ -50,9 +51,12 @@
   "health.dormant": "very long quiet", "health.archived": "archived",
   "health.gone": "unreachable", "health.unknown": "unknown",
 
-  "unit.days": "{n} d", "unit.daysAgo": "{n} d ago", "unit.perYear": "{n}/yr",
+  "unit.days": "{n} d", "unit.now": "just now", "unit.min": "{n} min", "unit.hours": "{n} h",
+  "unit.months": "{n} mo", "unit.ago": "{v} ago", "unit.perYear": "{n}/yr",
 
   "hint.noValue": "No figure available",
+  "hint.version": "Newest release reported by HACS.",
+  "hint.rankKept": "Position in this view's unfiltered ranking.",
   "hint.ambiguousDomain": "Several HACS repositories claim this integration domain, so the figure cannot be attributed to one of them.",
   "hint.starsAdded": "Stars given during the period. GitHub does not report removed stars, so this is not a net change.",
   "hint.integrationsOnly": "Installation figures exist for integrations only — dashboard cards, themes and templates are not reported.",

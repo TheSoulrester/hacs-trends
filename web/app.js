@@ -35,6 +35,26 @@ function addDays(iso, k) {
   var x = new Date(iso + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + k);
   return x.toISOString().slice(0, 10);
 }
+/* The export carries minute resolution, so the distance is computed against the
+   visitor's clock rather than baked in at export time. A repository pushed to an hour
+   ago reads "1 h", not "0 d", and the figure stays right between the twice-daily runs.
+   Older exports carry a bare date; those are read as midday UTC so the day is right. */
+function rel(iso) {
+  if (!iso) return "";
+  var ms = Date.now() - Date.parse(iso.length <= 10 ? iso + "T12:00:00Z" : iso);
+  if (!isFinite(ms)) return "";
+  if (ms < 0) ms = 0;
+  var min = Math.floor(ms / 60000);
+  if (min < 1) return t("unit.now");
+  if (min < 60) return t("unit.min", { n: n(min) });
+  var h = Math.floor(min / 60);
+  if (h < 24) return t("unit.hours", { n: n(h) });
+  var d = Math.floor(h / 24);
+  if (d < 60) return t("unit.days", { n: n(d) });
+  return t("unit.months", { n: n(Math.round(d / 30.44)) });
+}
+function ago(iso) { var v = rel(iso); return v ? t("unit.ago", { v: v }) : ""; }
+
 var ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ESC[c]; }); }
 
@@ -48,7 +68,24 @@ var ICONS = {
   fresh: '<path d="M12 5v14"/><path d="M5 12h14"/>'
 };
 
+/* One mark per HACS category, for the 2,055 repositories brands has no icon for. */
+var CAT_MARK = { integration: "\u25C6", plugin: "\u25A4", theme: "\u25D1", template: "\u2261",
+  python_script: "\u00BB", appdaemon: "\u25A3", netdaemon: "\u25A3" };
+/* Domains whose icon 404s. Remembered so a recycled row does not ask again. */
+var ICON_GONE = {};
+function iconHtml(r) {
+  if (r.dom && !ICON_GONE[r.dom]) {
+    return '<span class="ic" data-cat="' + esc(r.c) +
+      '"><img src="https://brands.home-assistant.io/' + encodeURIComponent(r.dom) +
+      '/icon.png" alt="" loading="lazy" data-dom="' + esc(r.dom) + '"></span>';
+  }
+  return '<span class="ic fb" aria-hidden="true">' + (CAT_MARK[r.c] || "\u25C6") + "</span>";
+}
+
 var WINDOWS = [7, 30, 90, 365];
+/* Must match --row in the stylesheet: the renderer positions rows absolutely and
+   cannot ask the DOM for a height it has not drawn yet. */
+var ROWH = 56;
 
 /* ----------------------------------------------------------------- views --- */
 var VIEWS = {
@@ -105,6 +142,26 @@ var RH_ORDER = { continuous: 0, regular: 1, occasional: 2, dormant: 3, never: 4 
 var DATA = null, ROWS = [], VIEW = [], view = "trending", win = 30;
 var sortKey = null, sortDir = -1, query = "", cat = null, rhythm = null;
 var viewport, spacer, pool = [], maxInstall = 1;
+/* Lowercasing 4,193 descriptions on every keystroke costs 79 ms, measured. The same
+   search against a prepared haystack costs 3.5 ms; building it costs 213 ms once, in
+   idle time after the first paint. Until it exists, the old path answers - a search
+   typed in the first moment is slower, never wrong. */
+var INDEXED = false;
+function buildIndex() {
+  for (var i = 0; i < ROWS.length; i++) {
+    var r = ROWS[i];
+    r._k = (r.n + " " + (r.t || "") + " " + (r.dom || "")).toLowerCase();
+    r._d = (r.d || "").toLowerCase();
+  }
+  INDEXED = true;
+}
+function hit(r, q) {
+  if (INDEXED) return r._k.indexOf(q) >= 0 || r._d.indexOf(q) >= 0;
+  return (r.n && r.n.toLowerCase().indexOf(q) >= 0) ||
+         (r.t && r.t.toLowerCase().indexOf(q) >= 0) ||
+         (r.d && r.d.toLowerCase().indexOf(q) >= 0) ||
+         (r.dom && r.dom.toLowerCase().indexOf(q) >= 0);
+}
 function $(id) { return document.getElementById(id); }
 
 function installWindowOk(w) {
@@ -139,22 +196,17 @@ function apply() {
   var v = VIEWS[view];
   if (view === "momentum") computeMomentum(win);
   ROWS.forEach(function (r) { r._rh = RH_ORDER[r.rh] === undefined ? 9 : RH_ORDER[r.rh]; });
-  var q = query.trim().toLowerCase();
-  VIEW = ROWS.filter(function (r) {
-    if (v.filter && !v.filter(r, win)) return false;
-    if (cat && r.c !== cat) return false;
-    if (rhythm && r.rh !== rhythm) return false;
-    if (q && !((r.n && r.n.toLowerCase().indexOf(q) >= 0) ||
-               (r.t && r.t.toLowerCase().indexOf(q) >= 0) ||
-               (r.d && r.d.toLowerCase().indexOf(q) >= 0) ||
-               (r.dom && r.dom.toLowerCase().indexOf(q) >= 0))) return false;
-    return true;
-  });
+  /* The ranking is numbered BEFORE the user's filters are applied, so a search result
+     keeps the place it holds in the whole list: finding a repository at 412 tells you
+     something that finding it at 1 does not. Only the view's own eligibility rule
+     (an installation figure, a growth figure) takes part in the numbering - a row that
+     cannot be ranked at all has no place to keep. */
+  var base = ROWS.filter(function (r) { return !v.filter || v.filter(r, win); });
   var key = sortKey || v.sort(win);
   var str = key === "n" || key === "c";
   var dir = sortDir;
   var tie = (!sortKey && v.tie) ? v.tie : null;
-  VIEW.sort(function (a, b) {
+  base.sort(function (a, b) {
     var x = a[key], y = b[key];
     var ax = x === undefined || x === null, ay = y === undefined || y === null;
     /* Rows without a value sink in BOTH directions - otherwise an ascending sort
@@ -167,6 +219,15 @@ function apply() {
     if (d === 0 && tie) return tie(a, b);
     return d;
   });
+  for (var i = 0; i < base.length; i++) base[i]._rank = i + 1;
+
+  var q = query.trim().toLowerCase();
+  VIEW = (q || cat || rhythm) ? base.filter(function (r) {
+    if (cat && r.c !== cat) return false;
+    if (rhythm && r.rh !== rhythm) return false;
+    if (q && !hit(r, q)) return false;
+    return true;
+  }) : base;
   maxInstall = VIEW.reduce(function (m, r) { return Math.max(m, r.inst || 0); }, 1);
   renderStrip(); render(); renderFoot();
 }
@@ -186,11 +247,21 @@ function dotline(cls, label, extra) {
 }
 function cell(c, r, idx) {
   switch (c) {
-    case "rank": return '<span class="rn">' + (idx + 1) + "</span>";
+    case "rank": {
+      var pos = r._rank || idx + 1;
+      return '<span class="rn"' +
+        (pos === idx + 1 ? "" : ' title="' + esc(t("hint.rankKept")) + '"') +
+        ">" + pos + "</span>";
+    }
     case "repo":
-      return '<span class="repo"><a href="https://github.com/' + esc(r.n) +
-        '" target="_blank" rel="noopener">' + esc(r.t || r.n.split("/")[1]) + "</a>" +
-        '<span class="slug">' + esc(r.n) + "</span></span>";
+      return '<span class="repo">' + iconHtml(r) +
+        '<span class="stack"><span class="l1">' +
+        '<a href="https://github.com/' + esc(r.n) + '" target="_blank" rel="noopener">' +
+        esc(r.t || r.n.split("/")[1]) + "</a>" +
+        '<span class="slug" title="' + esc(r.n) + '">' + esc(r.n) + "</span>" +
+        (r.v ? '<span class="ver" title="' + esc(t("hint.version")) + '">' +
+               esc(r.v) + "</span>" : "") + "</span>" +
+        '<span class="desc">' + (r.d ? esc(r.d) : "") + "</span></span></span>";
     case "cat": return '<span class="cat">' + esc(t("cat." + r.c)) + "</span>";
     case "stars": return r.s === undefined ? na() : '<span class="num">' + n(r.s) + "</span>";
     case "gained": return delta(r["d" + win]);
@@ -221,16 +292,15 @@ function cell(c, r, idx) {
     }
     case "commits": return r.cy === undefined ? na() : '<span class="num">' + n(r.cy) + "</span>";
     case "released":
-      return r.ra === undefined ? na(t("hint.noRelease"))
-        : '<span class="num">' + t("unit.daysAgo", { n: n(r.ra) }) + "</span>";
+      return r.rd === undefined ? na(t("hint.noRelease"))
+        : '<span class="num">' + esc(ago(r.rd)) + "</span>";
     case "rhythm":
       return dotline("rh-" + (r.rh || "never"), t("rhythm." + (r.rh || "never")),
         r.ry !== undefined ? t("unit.perYear", { n: n(r.ry) + (r.ryc ? "+" : "") }) : "");
     case "starRank": return r._srank === undefined ? na() : '<span class="num">' + r._srank + "</span>";
     case "instRank": return r._irank === undefined ? na() : '<span class="num">' + r._irank + "</span>";
     case "health":
-      return dotline("h-" + r.h, t("health." + r.h),
-        r.age !== undefined ? t("unit.days", { n: n(r.age) }) : "");
+      return dotline("h-" + r.h, t("health." + r.h), r.lu ? esc(rel(r.lu)) : "");
   }
   return "";
 }
@@ -246,16 +316,28 @@ function visibleCols() {
 }
 function tpl() { return visibleCols().map(function (c) { return COLS[c].w; }).join(" "); }
 
+/* Below 900px the stylesheet gives the viewport its content height, so its clientHeight
+   is the height of all 4,193 rows and the renderer would build every one of them -
+   71,405 DOM nodes, measured. On that layout the page itself scrolls, so the window is
+   read from where the spacer sits relative to the screen. */
+function metrics() {
+  if (innerWidth <= 900) {
+    var r = spacer.getBoundingClientRect();
+    return { top: Math.max(0, -r.top), h: innerHeight };
+  }
+  return { top: viewport.scrollTop, h: viewport.clientHeight };
+}
+
 function render() {
-  var cols = visibleCols(), grid = tpl(), h = 40;
+  var cols = visibleCols(), grid = tpl(), h = ROWH;
   spacer.style.height = (VIEW.length * h) + "px";
   if (!VIEW.length) {
     spacer.innerHTML = '<div class="empty">' + esc(t("foot.empty")) + "</div>"; pool = []; return;
   }
   if (!pool.length) spacer.innerHTML = "";
-  var top = viewport.scrollTop;
+  var m = metrics(), top = m.top;
   var first = Math.max(0, Math.floor(top / h) - 4);
-  var last = Math.min(VIEW.length, Math.ceil((top + viewport.clientHeight) / h) + 4);
+  var last = Math.min(VIEW.length, Math.ceil((top + m.h) / h) + 4);
   var need = last - first;
   while (pool.length < need) {
     var el = document.createElement("div"); el.className = "row";
@@ -263,7 +345,9 @@ function render() {
   }
   for (var i = 0; i < pool.length; i++) {
     var node = pool[i];
-    if (i >= need) { node.hidden = true; continue; }
+    /* Emptying the surplus as well: a row that is hidden but still carries the old
+       repository is one CSS rule away from being a phantom duplicate on screen. */
+    if (i >= need) { if (!node.hidden) { node.hidden = true; node.innerHTML = ""; } continue; }
     var idx = first + i, r = VIEW[idx];
     node.hidden = false;
     node.style.top = (idx * h) + "px";
@@ -272,6 +356,20 @@ function render() {
       return '<div class="cell' + (COLS[c].right ? " r" : "") + '">' + cell(c, r, idx) + "</div>";
     }).join("");
   }
+  /* The version must not shrink, so the path absorbs every missing pixel and can end up
+     as a two-pixel sliver of ellipsis - noise where a path used to be. Below the width
+     of about five characters it says nothing, so it is dropped and the full path stays
+     on the tooltip. All widths are read before any of them is acted on: hiding one inside
+     the reading loop invalidates the layout and forces the browser to compute it again
+     for the next read, which measured 26 ms per render against 9 ms for the same work
+     split in two. */
+  var slugs = [], widths = [];
+  for (var j = 0; j < need; j++) {
+    var sl = pool[j].querySelector(".slug");
+    if (sl) slugs.push(sl);
+  }
+  for (j = 0; j < slugs.length; j++) widths.push(slugs[j].getBoundingClientRect().width);
+  for (j = 0; j < slugs.length; j++) slugs[j].hidden = widths[j] < 46;
 }
 
 function buildHead() {
@@ -317,6 +415,9 @@ function buildNav() {
 function buildWindows() {
   var box = $("windows"), v = VIEWS[view];
   box.hidden = !v.windowed;
+  /* Cleared, not merely hidden: a leftover button keeps its click handler, and clicking
+     it used to change the period silently while the highlight stayed where it was. */
+  box.innerHTML = "";
   if (!v.windowed) return;
   box.innerHTML = WINDOWS.map(function (w) {
     return '<button data-w="' + w + '" aria-pressed="' + (w === win) + '">' +
@@ -400,6 +501,59 @@ function buildFilters() {
   });
 }
 
+/* ---------------------------------------------------------- autocomplete ---
+ * Over name, display name and repository path only. A substring hit inside a
+ * description makes a poor suggestion even though the search itself covers it. */
+var SUG = [], sugSel = -1;
+function suggest(raw) {
+  var q = raw.trim().toLowerCase();
+  if (q.length < 2) return [];
+  var head = [], tail = [];
+  for (var i = 0; i < ROWS.length; i++) {
+    var r = ROWS[i];
+    var nm = (r.t || r.n.split("/")[1]).toLowerCase();
+    var slug = r.n.toLowerCase(), sn = slug.split("/")[1] || "";
+    var dom = (r.dom || "").toLowerCase();
+    if (nm.indexOf(q) === 0 || sn.indexOf(q) === 0 || dom.indexOf(q) === 0) head.push(r);
+    else if (nm.indexOf(q) >= 0 || slug.indexOf(q) >= 0 || dom.indexOf(q) >= 0) tail.push(r);
+  }
+  function pop(a, b) { return (b.s || 0) - (a.s || 0); }
+  head.sort(pop); tail.sort(pop);
+  return head.concat(tail).slice(0, 8);
+}
+function renderSuggest() {
+  var box = $("ac");
+  if (!SUG.length) { closeSuggest(); return; }
+  box.innerHTML = SUG.map(function (r, i) {
+    return '<button type="button" role="option" data-i="' + i + '" aria-selected="' +
+      (i === sugSel) + '">' + iconHtml(r) +
+      '<span class="an">' + esc(r.t || r.n.split("/")[1]) + "</span>" +
+      '<span class="as">' + esc(r.n) + "</span></button>";
+  }).join("");
+  box.hidden = false;
+  $("q").setAttribute("aria-expanded", "true");
+  box.querySelectorAll("button").forEach(function (b) {
+    b.addEventListener("mousedown", function (ev) {
+      ev.preventDefault();
+      choose(SUG[parseInt(b.dataset.i, 10)]);
+    });
+  });
+}
+function closeSuggest() {
+  SUG = []; sugSel = -1;
+  $("ac").hidden = true; $("ac").innerHTML = "";
+  $("q").setAttribute("aria-expanded", "false");
+}
+function choose(r) {
+  if (!r) return;
+  $("q").value = r.n;
+  query = r.n;
+  closeSuggest();
+  apply();
+  viewport.scrollTop = 0;
+  if (innerWidth <= 900) scrollTo(0, 0);
+}
+
 function renderFoot() {
   var c = DATA.meta.coverage;
   $("foot").innerHTML =
@@ -436,10 +590,34 @@ function boot(data) {
   DATA = data; ROWS = data.repos;
   viewport = $("viewport"); spacer = $("spacer");
   viewport.addEventListener("scroll", render, { passive: true });
+  /* The narrow layout scrolls the page, not the viewport element. */
+  addEventListener("scroll", function () { if (innerWidth <= 900) render(); }, { passive: true });
   addEventListener("resize", function () { pool = []; spacer.innerHTML = ""; buildHead(); render(); });
-  $("q").addEventListener("input", function (e) {
-    query = e.target.value; apply(); viewport.scrollTop = 0;
+  /* Error events do not bubble, but they do capture. One listener, no inline handler,
+     and a domain that 404s is asked for exactly once. */
+  spacer.addEventListener("error", function (e) {
+    var img = e.target;
+    if (!img || img.tagName !== "IMG" || !img.dataset.dom) return;
+    ICON_GONE[img.dataset.dom] = 1;
+    var box = img.parentNode;
+    box.className = "ic fb";
+    box.setAttribute("aria-hidden", "true");
+    box.textContent = CAT_MARK[box.dataset.cat] || "\u25C6";
+  }, true);
+  var qi = $("q");
+  qi.addEventListener("input", function (e) {
+    query = e.target.value;
+    SUG = suggest(query); sugSel = -1; renderSuggest();
+    apply(); viewport.scrollTop = 0;
   });
+  qi.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { closeSuggest(); return; }
+    if (!SUG.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); sugSel = (sugSel + 1) % SUG.length; renderSuggest(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); sugSel = (sugSel - 1 + SUG.length) % SUG.length; renderSuggest(); }
+    else if (e.key === "Enter" && sugSel >= 0) { e.preventDefault(); choose(SUG[sugSel]); }
+  });
+  qi.addEventListener("blur", closeSuggest);
   var sel = $("lang");
   sel.innerHTML = LANGS.map(function (a) {
     return '<option value="' + a[0] + '">' + a[1] + "</option>";
@@ -447,10 +625,12 @@ function boot(data) {
   var start = pickLocale();
   sel.value = start;
   sel.onchange = function () { loadLocale(sel.value); };
-  if (BUNDLED) { EN = BUNDLED.en || {}; loadLocale(start); return; }
+  var idle = window.requestIdleCallback || function (f) { return setTimeout(f, 250); };
+  if (BUNDLED) { EN = BUNDLED.en || {}; loadLocale(start); idle(buildIndex); return; }
   fetch("./i18n/en.json").then(function (r) { return r.json(); })
     .then(function (j) { EN = j; loadLocale(start); })
-    .catch(function () { EN = {}; loadLocale("en"); });
+    .catch(function () { EN = {}; loadLocale("en"); })
+    .then(function () { idle(buildIndex); });
 }
 
 var el = document.getElementById("inline-data");

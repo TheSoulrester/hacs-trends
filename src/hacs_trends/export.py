@@ -48,6 +48,29 @@ def _iso_day(value) -> str | None:
     return str(value)[:10]
 
 
+def _iso_min(value) -> str | None:
+    """Minute resolution, UTC.
+
+    A date alone cannot say "an hour ago" — it can only say "0 d", which is what the
+    page used to show for anything pushed today. The database holds the full timestamp,
+    so this is an export decision, not a collection one. The page computes the distance
+    against the visitor's clock, which also keeps the figure right between the two
+    daily runs instead of freezing it at export time.
+
+    Costs about seven characters per field and row, most of which gzip removes again.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        try:
+            value = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return str(value)[:10]
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+
+
 def build_payload(session, today: date | None = None) -> dict:
     today = today or session.scalar(select(func.max(Snapshot.day)))
     if today is None:
@@ -142,7 +165,7 @@ def build_payload(session, today: date | None = None) -> dict:
         if r.last_version:
             item["v"] = r.last_version
         if activity:
-            item["lu"] = _iso_day(activity)
+            item["lu"] = _iso_min(activity)
         if age is not None:
             item["age"] = age
         item["h"] = health
@@ -159,7 +182,7 @@ def build_payload(session, today: date | None = None) -> dict:
             item["cq"] = info["commits_quarter"]
         rel_at = info.get("released_at")
         if rel_at:
-            item["rd"] = _iso_day(rel_at)
+            item["rd"] = _iso_min(rel_at)
             item["ra"] = (now - (rel_at.replace(tzinfo=timezone.utc)
                                  if rel_at.tzinfo is None else rel_at)).days
         item["rh"] = release_rhythm(ry, rel_at, now)

@@ -4,6 +4,7 @@
   "app.title": "HACS Trends",
   "app.repoStamp": "{n} Repositories · {date}",
   "app.sources": "HACS · Home-Assistant-Analytik · GitHub",
+  "app.method": "Wie die Zahlen entstehen →",
   "app.notOfficial": "Kein offizielles HACS-Projekt",
 
   "view.trending.title": "Bekommt Aufmerksamkeit",
@@ -50,9 +51,12 @@
   "health.dormant": "sehr lange still", "health.archived": "archiviert",
   "health.gone": "nicht erreichbar", "health.unknown": "unbekannt",
 
-  "unit.days": "{n} T", "unit.daysAgo": "vor {n} T", "unit.perYear": "{n}/J",
+  "unit.days": "{n} T", "unit.now": "gerade eben", "unit.min": "{n} Min.", "unit.hours": "{n} Std.",
+  "unit.months": "{n} Mon.", "unit.ago": "vor {v}", "unit.perYear": "{n}/J",
 
   "hint.noValue": "Kein Wert verfügbar",
+  "hint.version": "Neuestes von HACS gemeldetes Release.",
+  "hint.rankKept": "Platz in der ungefilterten Rangliste dieser Sicht.",
   "hint.ambiguousDomain": "Mehrere HACS-Repositories beanspruchen diese Domain, die Zahl lässt sich keinem davon eindeutig zuordnen.",
   "hint.starsAdded": "Im Zeitraum vergebene Sterne. GitHub meldet keine entfernten Sterne, das ist also keine Netto-Änderung.",
   "hint.integrationsOnly": "Installationszahlen gibt es nur für Integrationen — Dashboard-Karten, Themes und Templates werden nicht erfasst.",

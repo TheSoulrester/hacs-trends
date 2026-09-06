@@ -16,9 +16,14 @@
   --accent:#e0a955; --accent-ink:#0f1317;
   --pos:#6fd08c; --neg:#e07070;
   --active:#6fd08c; --quiet:#d3a03e; --stale:#e0824a; --dormant:#e07070; --unknown:#6f7f8d;
-  --rail:212px; --row:40px;
+  --rail:212px; --row:56px;
 }
 *{box-sizing:border-box}
+/* The browser's own [hidden]{display:none} loses against any author rule that sets
+   display - .seg and .row both do. Without this line, element.hidden = true sets the
+   attribute and changes nothing: dead-looking period buttons and pooled rows that stay
+   painted with stale content. */
+[hidden]{display:none!important}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -74,6 +79,17 @@ button{font:inherit;color:inherit;background:none;border:none}
   background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px}
 .search input::placeholder{color:var(--ink-4)}
 .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-4)}
+.ac{position:absolute;top:calc(100% + 5px);left:0;width:330px;max-width:76vw;z-index:30;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:7px;overflow:hidden;
+  box-shadow:0 12px 28px rgba(0,0,0,.45)}
+.ac button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;cursor:pointer;
+  text-align:left;border-bottom:1px solid var(--line)}
+.ac button:last-child{border-bottom:0}
+.ac button[aria-selected="true"]{background:var(--raise)}
+.ac .ic{width:22px;height:22px;border-radius:5px}
+.ac .an{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.ac .as{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--ink-4);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:auto}
 .langsel select{background:var(--panel);border:1px solid var(--line-2);color:var(--ink-2);
   border-radius:6px;padding:6px 8px;font-size:12px;cursor:pointer}
 
@@ -103,12 +119,31 @@ button{font:inherit;color:inherit;background:none;border:none}
 .cell{padding:0 11px;overflow:hidden;min-width:0}
 .cell.r{text-align:right}
 .rn{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-4)}
-.repo{display:flex;align-items:baseline;gap:8px;min-width:0}
+.repo{display:flex;align-items:center;gap:10px;min-width:0}
 .repo a{font-size:13.5px;font-weight:600;color:var(--ink);text-decoration:none;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;max-width:100%}
 .repo a:hover{color:var(--accent);text-decoration:underline}
 .repo .slug{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-4);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1}
+.stack{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.l1{display:flex;align-items:baseline;gap:8px;min-width:0}
+/* The version never shrinks; the path gives up its characters instead. A truncated
+   path still identifies the repository, a truncated version number does not. */
+.ver{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-3);
+  flex-shrink:0;white-space:nowrap}
+.ver::before{content:"\00B7";color:var(--ink-4);margin-right:6px}
+.desc{color:var(--ink-3);font-size:11.5px;line-height:1.35;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Icons come from brands.home-assistant.io, which has one for 2,138 of the 4,193
+   repositories - integrations with a brands entry. The rest get the category mark on
+   the panel colour rather than the CDN's own placeholder, which would look like a
+   broken image repeated two thousand times. Logos are drawn for light backgrounds,
+   hence the light plate under them. */
+.ic{width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  border-radius:6px;background:#eef2f6;padding:2px;overflow:hidden}
+.ic img{width:100%;height:100%;object-fit:contain;display:block}
+.ic.fb{background:var(--raise);color:var(--ink-4);padding:0;
+  font-family:"JetBrains Mono",monospace;font-size:12px}
 .cat{font-size:11.5px;color:var(--ink-2);white-space:nowrap}
 .num{font-family:"JetBrains Mono",monospace;font-size:12.5px}
 .delta{font-family:"JetBrains Mono",monospace;font-size:12.5px;font-weight:700}
@@ -168,6 +203,8 @@ button{font:inherit;color:inherit;background:none;border:none}
   </div>
   <div class="railfoot">
     <span data-i18n="app.sources"></span><br>
+    <a href="https://github.com/TheSoulrester/hacs-trends#how-every-figure-is-produced"
+       target="_blank" rel="noopener" data-i18n="app.method"></a><br>
     <span data-i18n="app.notOfficial"></span>
   </div>
 </nav>
@@ -182,7 +219,9 @@ button{font:inherit;color:inherit;background:none;border:none}
     <div class="search">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
         <circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
-      <input id="q" type="search" autocomplete="off">
+      <input id="q" type="search" autocomplete="off" role="combobox" aria-expanded="false"
+             aria-autocomplete="list" aria-controls="ac">
+      <div class="ac" id="ac" role="listbox" hidden></div>
     </div>
     <span class="langsel"><select id="lang" aria-label="Language"></select></span>
   </div>

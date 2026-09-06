@@ -359,13 +359,12 @@ Archived: 1. Gone from GitHub: 16. Forks: 133. Without a licence: 548.
 - **A 100-repository GraphQL batch times out** (502, and 504 on heavy repositories).
   Fifty works; the collector halves a failing batch and retries rather than losing it.
 
-### Known defect, not yet fixed
+### Known defect, fixed since
 
-`releases_year` **saturates at 30** because only 30 release nodes are fetched. The top
-of the "Ships reliably" ranking is therefore all ties at 30, decided by the commit
-tiebreaker rather than by releases. Fix: a second pass fetching 100 nodes for the ~1,147
-repositories that hit the ceiling (~23 queries), and display anything still at the
-ceiling as "100+" rather than as an exact number.
+`releases_year` **saturated at 30** because only 30 release nodes were fetched, so the
+top of the "Ships reliably" ranking was one block of ties decided by the commit
+tiebreaker. A second pass now re-queries the repositories that hit the ceiling with 100
+nodes. 52 are still at 100 and display as "100+"; everything below that is exact.
 
 ### Still open
 
@@ -374,3 +373,191 @@ ceiling as "100+" rather than as an exact number.
   installation history.
 - Sparkline payload size — estimated, never measured.
 - 773 repositories gained no stars at all in 60 weeks. Worth surfacing as its own fact.
+
+## 12. Round two — reported defects and what is planned for them
+
+Everything in this section was measured on the live site
+(`https://thesoulrester.github.io/hacs-trends/`) and on the 2026-09-05 export,
+not estimated.
+
+### 12.1 One missing CSS rule causes two of the reported bugs
+
+`web/index.html` has no `[hidden]{display:none!important}` rule. The browser's own
+stylesheet does carry `[hidden]{display:none}`, but author rules outrank it, and two
+author rules set `display` on exactly the elements the code hides:
+
+- `.seg{display:inline-flex}` — the time-window buttons
+- `.row{display:grid}` — the pooled table rows
+
+So `element.hidden = true` sets the attribute and changes nothing on screen.
+
+**Effect A — window buttons look stuck.** `buildWindows()` sets `box.hidden = !v.windowed`
+and returns early for non-windowed views. In `installed`, `ships`, `maintenance` and
+`fresh` the buttons therefore stay visible with their old click handlers. Clicking one
+changes `win`, calls `buildWindows()`, which returns before re-rendering the buttons, so
+`aria-pressed` never moves. The button appears dead — and `win` has silently changed
+underneath, which is why the next windowed view can open on an unexpected period.
+This matches the report exactly: "not always, but often".
+
+**Effect B — duplicate rows under search.** The renderer keeps a pool of row elements and
+hides the surplus with `node.hidden = true`. The surplus stays visible, at its old
+absolute position, with its old content. Filtering the list down (which is what searching
+does) shrinks `need`, so leftover rows from the unfiltered list remain painted over the
+result. `washdata` occurs exactly once in `data.json` — zero duplicate ids, zero duplicate
+names — so the second "washdata" on screen is a ghost row, not a data defect.
+
+**Fix.** Add `[hidden]{display:none!important}` to the stylesheet. Additionally reset the
+surplus rows' `innerHTML` and drop the stale click handlers so nothing depends on a single
+CSS rule, and hide the window strip by removing the buttons rather than by an attribute.
+
+*Why it never showed in the design preview*: the artifact wrapper injects that rule.
+The standalone page does not.
+
+### 12.2 Search: 79 ms per keystroke, no index
+
+Measured on an M-series Mac, whole corpus, one keystroke:
+
+| step | today | with index |
+|---|---|---|
+| filter incl. description | 79.4 ms | 3.5 ms |
+| building the index | — | 213 ms, once |
+
+The cost is `toLowerCase()` on up to 300 characters of description for 4,193 rows on every
+keystroke. Plan: build a lowercase haystack (`name + title + domain + description`) once
+after first paint, in an idle callback, and search against it. Search stays over the same
+four fields, so results do not change.
+
+Autocomplete rides on the same index: a dropdown of at most eight matches on name,
+display name and repository path (not description — a substring hit inside a sentence
+makes a poor suggestion), ordered by stars, arrow keys and Enter. Choosing a suggestion
+puts the full path into the search box, which narrows the table to that one repository.
+
+### 12.3 "0 d" — the export throws the time of day away
+
+`_iso_day()` truncates every timestamp to a date, so anything less than a day old reads
+`0 d`. The database holds full timestamps (`2026-09-05 18:41:24`), so this is an export
+change only: emit `lu` and `rd` with minute resolution (`2026-09-05T18:41Z`) and let the
+page compute the distance from the current clock. Cost: about +7 characters per field per
+row, roughly 29 KB uncompressed and far less after gzip. Benefit beyond the fix: the
+figure stops being frozen at export time and stays right between the twice-daily runs.
+
+Display ladder: `< 60 min` → minutes, `< 24 h` → hours, `< 60 d` → days, beyond that
+months. Same ladder for last commit and last release.
+
+### 12.4 Icons
+
+`https://brands.home-assistant.io/<domain>/icon.png` serves core and custom integrations
+from one path; a domain without an icon returns 404, and the `/_/` variant returns a
+placeholder image instead. Coverage against our corpus, counted from the brands repository
+tree:
+
+| | repositories |
+|---|---|
+| total | 4,193 |
+| have a domain | 3,248 |
+| have `icon.png` in brands | **2,138 (51 %)** |
+| domain, but no brands entry | 1,055 |
+| no domain at all (cards, themes, scripts) | 945 |
+
+So roughly every second row can have a real icon and the rest needs a placeholder — the
+category glyph on the panel colour, not the brands placeholder image, which would look
+like a broken icon repeated a thousand times. Icons are cached for seven days by the
+browser and served by Cloudflare, and only the ~20 rows in the viewport request one.
+
+Since HA 2026.3 custom integrations may ship their brand icons in their own repository and
+have them proxied, so real coverage may be higher than the 2,138 counted here. Not
+verifiable from this network; worth re-measuring against the live CDN.
+
+### 12.5 Performance — the desktop is fine, the phone is not
+
+Measured on the live site:
+
+| | |
+|---|---|
+| `data.json` over the wire | **513 KB** (1.85 MB uncompressed, gzip by Pages) |
+| `JSON.parse` | 78 ms |
+| filter for a view | 3.3 ms |
+| sort | 3.2 ms |
+| DOM interactive | 445 ms |
+
+Nothing here justifies paging or lazy loading: the table already renders only the rows in
+the viewport.
+
+**But** the ≤900 px stylesheet sets `.viewport{overflow:visible;height:auto}`, which makes
+`viewport.clientHeight` equal to the full content height. The renderer then decides it
+needs every row and builds **all 4,193 of them: 71,405 DOM nodes**. Confirmed in the
+browser. On a phone this is the whole performance problem, and it is a layout bug rather
+than a data-volume problem. Fix: on the narrow layout, drive the window from the page
+scroll position and `window.innerHeight` instead of the element's, keeping the same ~20
+live rows everywhere.
+
+### 12.6 Answers to two questions this round raised
+
+**Where the "kind" badge comes from.** It is the HACS category, and it comes from which
+category file the repository is listed in at `data-v2.hacs.xyz/<category>/data.json`.
+Nothing is inferred. Corpus: 3,244 integrations, 765 plugins (dashboard cards), 106 themes,
+54 AppDaemon apps, 11 templates, 9 python scripts, 4 NetDaemon apps.
+
+**How release rhythm is defined.** Releases published in the last 365 days, bucketed:
+≥ 12 continuous, ≥ 4 regular, ≥ 1 occasional, 0 dormant, and never for a repository that
+has never published a release. The thresholds come from the measured corpus (median 4
+releases a year, P75 13, P90 27; 18.5 % dormant, 3.1 % never), not from round numbers.
+Caveat: the count is exact except for the 52 repositories still at the 100-release
+fetch ceiling, which display as "100+" (see §11).
+
+
+### 12.7 What was decided and built
+
+Chosen: two-line rows (56 px) with icons, everything in one pass, autocomplete included.
+
+Verified in headless Chromium against the real export, viewport 1440x900 and 390x844:
+
+| check | result |
+|---|---|
+| row height / description present | 56 px, description on every row |
+| search `washdata` | **1 visible row** (was 2) |
+| period strip in a non-windowed view | `hidden`, `display:none`, zero buttons left |
+| period buttons after switching back | 7 d selects and marks correctly |
+| relative time | `21 min`, `12 h`, `3 d`, German `21 Min.` |
+| rows in the DOM at 390 px | **20**, and 24 after scrolling (was 4,193) |
+| page errors | none |
+
+Icons could not be loaded in the test environment (the CDN is not reachable from there),
+which exercised the fallback path instead: every row fell back to the category mark with
+no error. The URL form is the one the brands repository documents.
+
+Still open from this round: re-measuring icon coverage against the live CDN now that
+integrations may ship their own brand icons.
+
+### 12.8 The rank column keeps its place under a filter
+
+Numbering happens before the user's filters, not after. Searching for a repository now
+answers a second question along with the first: not only that it exists, but where it
+stands. `washdata` comes back as **6**, not as **1**; filtering the list to themes shows
+44, 67, 123 rather than 1, 2, 3.
+
+Only the view's own eligibility rule takes part in the numbering — a row with no growth
+figure has no place in a growth ranking to keep. The number follows the active sort, so
+sorting by stars renumbers everything before the filter is applied. Where nothing is
+filtered, the number is the position, exactly as before, and the tooltip appears only on
+a number that has been kept.
+
+Cost: sorting 4,193 rows instead of the filtered remainder — 3.2 ms, measured.
+
+### 12.9 Version behind the path
+
+The newest release now sits behind the repository path on the first line, separated by a
+middle dot. HACS reports one for 4,075 of 4,193 repositories; the rest simply show
+nothing rather than a placeholder.
+
+The version does not shrink, the path does — a shortened path still identifies the
+repository, a shortened version number does not. Below roughly five characters the path
+says nothing at all, so it is dropped entirely and the full path stays on its tooltip.
+Measured at 1440 px the path survives for every row; from about 1280 px down it gives way
+on the longer names, and on a phone it is always gone.
+
+That measurement costs one layout per render, but only if it is done properly: reading a
+width and hiding an element in the same loop invalidates the layout before the next read
+and made the browser recompute it twenty times — **26 ms per render against 9 ms** for the
+same work split into a read pass and a write pass. With the split, the probe costs
+nothing measurable (8.4–9.6 ms against 8.0–9.8 ms over three runs).

@@ -20,3 +20,6 @@ data/stars/progress.jsonl
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Local design scratch (row-options.html embeds icons as base64, ~700 KB)
+design/
