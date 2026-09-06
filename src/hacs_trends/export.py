@@ -29,6 +29,7 @@ from .metrics import (
     snapshot_days,
 )
 from .sources.analytics import map_repos_to_domains
+from .sources.hacs_default import FOUNDING_DAY
 from .star_history import WINDOWS
 from .star_history import coverage as star_coverage
 from .star_history import window_sums
@@ -107,6 +108,7 @@ def build_payload(session, today: date | None = None) -> dict:
             Repo.domain,
             Repo.topics,
             Repo.first_seen,
+            Repo.added_to_hacs,
             Repo.is_critical,
             Snapshot.stars,
             Snapshot.downloads,
@@ -237,6 +239,14 @@ def build_payload(session, today: date | None = None) -> dict:
         except ValueError:
             pass
         item["fs"] = _iso_day(r.first_seen)
+        # Acceptance into HACS, from the git history of hacs/default. Anything stamped
+        # with the day that list was created was in HACS before the record began, so it
+        # is flagged instead of carrying a date that would only look precise.
+        if r.added_to_hacs:
+            if r.added_to_hacs <= FOUNDING_DAY:
+                item["hb"] = 1
+            else:
+                item["ha"] = _iso_day(r.added_to_hacs)
         repos.append(item)
 
     repos.sort(key=lambda x: -(x.get("s") or 0))

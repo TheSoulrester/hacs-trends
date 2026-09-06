@@ -107,7 +107,7 @@ var VIEWS = {
   breakout: { windowed: true, sort: function (w) { return "p" + w; },
     filter: function (r, w) { return r["p" + w] !== undefined; },
     cols: ["rank", "repo", "cat", "growth", "gained", "stars", "installs", "rhythm", "health"] },
-  momentum: { windowed: true, sort: function () { return "_mom"; },
+  momentum: { windowed: true, sort: function () { return "_mom"; }, needsInstallHistory: true,
     filter: function (r, w) { return r._mom !== undefined && r["d" + w] !== undefined; },
     cols: ["rank", "repo", "cat", "starRank", "instRank", "gained", "installs", "health"] },
   ships: { windowed: false, sort: function () { return "ry"; },
@@ -122,8 +122,8 @@ var VIEWS = {
     cols: ["rank", "repo", "cat", "releases", "commits", "released", "adoption", "stars", "installs"] },
   maintenance: { windowed: false, sort: function () { return "age"; },
     cols: ["rank", "repo", "cat", "health", "released", "rhythm", "stars", "installs"] },
-  fresh: { windowed: false, sort: function () { return "fs"; },
-    cols: ["rank", "repo", "cat", "stars", "gained", "installs", "rhythm", "health"] }
+  fresh: { windowed: false, sort: function () { return "ha"; },
+    cols: ["rank", "repo", "addedAt", "cat", "stars", "gained", "installs", "health"] }
 };
 var ORDER = ["trending", "installed", "breakout", "momentum", "ships", "maintenance", "fresh"];
 
@@ -136,14 +136,15 @@ var COLS = {
   growth:    { w: "92px", i18n: "col.growth", sort: function (w) { return "p" + w; }, right: true, win: true },
   installs:  { w: "116px", i18n: "col.installs", sort: "inst", right: true, cls: "hide-sm" },
   instGained:{ w: "100px", i18n: "col.installsGained", sort: function (w) { return "i" + w; }, right: true, win: true },
-  adoption:  { w: "108px", i18n: "col.adoption", sort: "va", right: true, cls: "hide-md" },
+  adoption:  { w: "146px", i18n: "col.adoption", sort: "va", right: true, cls: "hide-md" },
   releases:  { w: "104px", i18n: "col.releases", sort: "ry", right: true },
   commits:   { w: "104px", i18n: "col.commits", sort: "cy", right: true, cls: "hide-md" },
   released:  { w: "128px", i18n: "col.lastRelease", sort: "ra" },
   rhythm:    { w: "134px", i18n: "col.rhythm", sort: "_rh", cls: "hide-md" },
   starRank:  { w: "96px", i18n: "col.starRank", sort: "_srank", right: true },
   instRank:  { w: "100px", i18n: "col.installRank", sort: "_irank", right: true },
-  health:    { w: "146px", i18n: "col.lastCommit", sort: "age" }
+  health:    { w: "146px", i18n: "col.lastCommit", sort: "age" },
+  addedAt:   { w: "142px", i18n: "col.addedAt", sort: "ha", str: true }
 };
 
 var RH_ORDER = { continuous: 0, regular: 1, occasional: 2, dormant: 3, never: 4 };
@@ -230,7 +231,7 @@ function apply() {
     base = baseList;
   } else {
     base = ROWS.filter(function (r) { return !v.filter || v.filter(r, win); });
-    var str = key === "n" || key === "c";
+    var str = key === "n" || key === "c" || key === "ha";
     var dir = sortDir;
     var tie = (!sortKey && v.tie) ? v.tie : null;
     base.sort(function (a, b) {
@@ -317,7 +318,8 @@ function cell(c, r, idx) {
       if (r.ry === undefined) return na();
       /* Only 30 releases are fetched per repository, 100 on the second pass. A value
          that hit the ceiling shows as 100+ rather than as a number we cannot stand behind. */
-      return '<span class="num">' + n(r.ry) + (r.ryc ? "+" : "") + "</span>";
+      return '<span class="num"' + (r.ryc ? ' title="' + esc(t("hint.releasesCapped")) + '"' : "") +
+        ">" + n(r.ry) + (r.ryc ? "+" : "") + "</span>";
     }
     case "commits": return r.cy === undefined ? na() : '<span class="num">' + n(r.cy) + "</span>";
     case "released":
@@ -328,8 +330,20 @@ function cell(c, r, idx) {
         r.ry !== undefined ? t("unit.perYear", { n: n(r.ry) + (r.ryc ? "+" : "") }) : "");
     case "starRank": return r._srank === undefined ? na() : '<span class="num">' + r._srank + "</span>";
     case "instRank": return r._irank === undefined ? na() : '<span class="num">' + r._irank + "</span>";
+    case "addedAt":
+      /* Repositories carried over when the HACS list was first written have no real date
+         - the record starts after they were already in. Saying so beats printing the day
+         the list was created as if it were theirs. */
+      if (r.hb) return '<span class="na" title="' + esc(t("hint.sinceStart")) + '">' +
+        esc(t("unit.sinceStart")) + "</span>";
+      return r.ha === undefined ? na(t("hint.noAddedDate"))
+        : '<span class="num">' + esc(dt(r.ha)) + "</span>";
     case "health":
-      return dotline("h-" + r.h, t("health." + r.h), r.lu ? esc(rel(r.lu)) : "");
+      /* "over a year   14 mo" said the same thing twice. The colour of the dot carries the
+         state, the figure carries the fact, and the word is on the tooltip for anyone who
+         cannot read the colour. */
+      return '<span title="' + esc(t("health." + r.h)) + '">' +
+        dotline("h-" + r.h, rel(r.lu) || t("health." + r.h)) + "</span>";
   }
   return "";
 }
@@ -417,7 +431,13 @@ function render() {
   var cols = visibleCols(), grid = tpl(), h = rowH(), card = narrow();
   spacer.style.height = (VIEW.length * h) + "px";
   if (!VIEW.length) {
-    spacer.innerHTML = '<div class="empty">' + esc(t("foot.empty")) + "</div>"; pool = []; return;
+    /* Two different kinds of nothing: a filter that matched nothing, and a column that
+       cannot have values yet. The second one used to be explained in the header while
+       the table sat there wordlessly empty. */
+    var why = (!query && !cat && !rhythm && VIEWS[view].needsInstallHistory && !installWindowOk(win))
+      ? t("empty.installsGrowing", { date: dt(installFrom(win)) })
+      : t("foot.empty");
+    spacer.innerHTML = '<div class="empty">' + esc(why) + "</div>"; pool = []; return;
   }
   if (!pool.length) spacer.innerHTML = "";
   var m = metrics(), top = m.top;
@@ -547,11 +567,6 @@ function renderHead() {
     minBase: 25, median: m.activity_percentiles.p50, p90: m.activity_percentiles.p90,
     installed: t("view.installed.title")
   });
-  if (VIEWS[view].windowed) note += " " + t("window.starsExact");
-  if (view === "momentum" && !installWindowOk(win)) {
-    note = t("view.momentum.note", {}) + " " +
-      t("window.installsGrowing", { date: dt(installFrom(win)) });
-  }
   $("view-note").innerHTML = esc(note).replace(/&lt;b&gt;/g, "<b>").replace(/&lt;\/b&gt;/g, "</b>");
 }
 

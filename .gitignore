@@ -23,3 +23,6 @@ data/stars/progress.jsonl
 
 # Local design scratch (row-options.html embeds icons as base64, ~700 KB)
 design/
+
+# Klon der HACS-Liste (wird bei jedem Lauf neu geholt)
+data/cache/

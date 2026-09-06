@@ -41,6 +41,10 @@ class Repo(Base):
     first_seen: Mapped[date] = mapped_column(Date, index=True)
     last_seen: Mapped[date] = mapped_column(Date, index=True)
 
+    # Aufnahmedatum aus der Git-Historie von hacs/default. Nicht mit first_seen zu
+    # verwechseln: first_seen ist der Tag, an dem WIR das Repo erstmals gesehen haben.
+    added_to_hacs: Mapped[date | None] = mapped_column(Date, index=True)
+
     # Aus /removed/data.json bzw. /critical/data.json
     is_removed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     removal_type: Mapped[str | None] = mapped_column(String(128))

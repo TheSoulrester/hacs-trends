@@ -63,6 +63,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_rr.add_argument("--batch-size", type=int, default=25)
 
+    p_hd = sub.add_parser(
+        "hacs-dates",
+        help="Acceptance dates from the git history of hacs/default",
+    )
+    p_hd.add_argument("--cache", default="data/cache", help="Where the clone is kept")
+
     sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
 
     p_exp = sub.add_parser("export", help="Statische docs/data.json erzeugen")
@@ -105,6 +111,44 @@ def main(argv: list[str] | None = None) -> int:
                 print(write_slice(session, root))
             else:
                 print(json.dumps(load_slices(session, root), indent=2))
+        return 0
+
+    if args.command == "hacs-dates":
+        from pathlib import Path as _P
+
+        from .db import Repo, make_engine, make_session_factory
+        from .sources.hacs_default import FOUNDING_DAY, collect
+
+        cache = _P(args.cache)
+        if not cache.is_absolute():
+            from .config import ROOT
+
+            cache = ROOT / args.cache
+        dates, report = collect(cache)
+
+        engine = make_engine(config.db_path)
+        Session = make_session_factory(engine)
+        with Session() as session:
+            matched = changed = 0
+            for repo in session.query(Repo).all():
+                found = dates.get(repo.full_name.lower())
+                if found is None:
+                    continue
+                matched += 1
+                if repo.added_to_hacs != found:
+                    repo.added_to_hacs = found
+                    changed += 1
+            total = session.query(Repo).count()
+            session.commit()
+        print(json.dumps({
+            "list_entries": report.entries,
+            "commits_walked": report.commits,
+            "matched": matched,
+            "of_repos": total,
+            "updated": changed,
+            "from_founding_day": report.founding,
+            "founding_day": FOUNDING_DAY.isoformat(),
+        }, indent=2))
         return 0
 
     if args.command == "load-stars":

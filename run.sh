@@ -84,6 +84,32 @@ case "${1:-serve}" in
     ;;
   export) cmd export --out web/data.json ;;
   stats)  cmd stats ;;
+  dates)  cmd hacs-dates ;;
+  enrich)
+    if [ ! -f .env ] || ! grep -q "^GITHUB_TOKEN=." .env 2>/dev/null; then
+      echo "GITHUB_TOKEN missing in .env - see .env.example" >&2
+      exit 1
+    fi
+    cmd enrich
+    cmd refine-releases
+    ;;
+  build)
+    # Everything the scheduled workflow does, minus the commit and the deploy. Takes
+    # about twelve minutes, nearly all of it the GitHub enrichment. Without this full
+    # chain an export is WORSE than the published file rather than newer: a database
+    # that has not been enriched leaves every release and commit column empty.
+    if [ ! -f .env ] || ! grep -q "^GITHUB_TOKEN=." .env 2>/dev/null; then
+      echo "GITHUB_TOKEN missing in .env - see .env.example" >&2
+      exit 1
+    fi
+    cmd sync
+    cmd hacs-dates
+    [ -d data/snapshots ] && cmd history-load || true
+    [ -f data/stars/star_days.jsonl.gz ] && cmd load-stars || true
+    cmd enrich
+    cmd refine-releases
+    cmd export --out web/data.json
+    ;;
   serve)
     echo "==> Daten holen"
     cmd sync
@@ -97,5 +123,5 @@ case "${1:-serve}" in
     if [ "$PY" = "uv" ]; then uv run python -m http.server -d web 8000
     else "$VENV/bin/python" -m http.server -d web 8000; fi
     ;;
-  *) echo "Usage: ./run.sh [serve|sync|bootstrap|export|stats|test]"; exit 1 ;;
+  *) echo "Usage: ./run.sh [serve|build|sync|dates|enrich|bootstrap|export|stats|test]"; exit 1 ;;
 esac

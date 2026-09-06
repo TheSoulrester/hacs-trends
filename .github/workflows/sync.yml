@@ -36,6 +36,12 @@ jobs:
       - name: Fetch HACS data and Home Assistant analytics
         run: hacs-trends sync
 
+      # When each repository was accepted into HACS, read from the git history of
+      # hacs/default. A 5.7 MB clone and four seconds, no token, exact back to 2019 -
+      # our own first_seen only knows the day this project started collecting.
+      - name: Acceptance dates from the HACS list
+        run: hacs-trends hacs-dates
+
       # The database is a cache. What is committed - the daily slices and the star
       # history - is the truth, and it is rebuilt from them on every run.
       - name: Rebuild history from the committed files

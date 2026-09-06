@@ -675,3 +675,63 @@ produces the table.
 Deliberate loss: the column headings are gone on a phone, and with them the ability to
 re-sort by tapping one. Each view has a sensible sort of its own; a sort control for
 phones would be its own piece of work.
+
+### 12.15 The interface stops explaining itself
+
+The view descriptions had a pattern the author did not see until a reader named it: they
+**justified the design** instead of saying what the list shows. "so that small projects do
+not disappear", "a project has to be strong in both", "the placement is never a black
+box" — answers to objections nobody had raised, in the one place on screen where space is
+most expensive. 1,953 characters across seven views, now 467.
+
+The rule they were rewritten under: the heading asks the question; the line underneath
+names **what is sorted** and **what limits the list**, as fact. No "so that", no "which
+means", no reassurance. Where a limit is a property of the data — 25 stars, integrations
+only, the release ceiling — it stays. Everything else moved to the README section this
+round added, which is linked from the rail.
+
+Two structural corrections came with it:
+
+- **"Installation trends begin on …" was in the header while the table sat wordlessly
+  empty.** It is a state, not an explanation, and now appears in the empty table area,
+  which is where the reader is looking when they wonder why nothing is there.
+- **"Real momentum" was jargon.** So was "percentile rank", which the first rewrite
+  introduced while removing the first offence. The view is called "Gaining and in use" and
+  says "Gaining stars and installations at the same time."
+
+One collision showed up while building. The status labels were changed to name their
+threshold — "over a year", "over two years" — because "long quiet" against "very long
+quiet" is not a difference anyone can read. But the cell also shows the measured distance,
+so it read "over a year   14 mo": the same thing twice. The cell now shows the coloured dot
+and the figure, and the word is on the tooltip for anyone who cannot read the colour. That
+also makes the table match the phone layout, which already did it that way.
+
+### 12.16 "New in HACS" had nothing to rank by
+
+The view sorted by `first_seen`, which is derived from the daily slices — and there are
+two of them. All 4,193 repositories carried 2026-09-05, the day this project started
+collecting. The list was sorted by a constant and nobody could tell.
+
+HACS keeps its store as plain lists in `github.com/hacs/default`, one file per category,
+each a JSON array of "owner/name". The day a repository was accepted is therefore the
+first commit that added its line. Measured before building anything:
+
+| | |
+|---|---|
+| clone | 5.7 MB, 4 s |
+| walking 4,903 commits | 1.3 s |
+| repositories matched | **4,171 of 4,193 (99.5 %)** |
+| entries stamped 2019-10-20 | 206 (122 still in the store) |
+| no date at all | 22 |
+
+No API, no token, exact back to 20 October 2019. It also answers a question the project
+could not answer before: **1,680 of the current repositories were accepted in 2026 and
+1,071 in 2025** — against 160 in 2024 and 168 in the whole of 2019.
+
+Two honest limits are on the page rather than in a footnote. The 2019-10-20 entries come
+from the commit that created the list out of an older location; those repositories were in
+HACS before the record begins, so the column says "since the start" instead of printing a
+day that is not theirs. The 22 without a date show a dash with the reason on the tooltip.
+
+`first_seen` stays as the fallback for anything accepted after our collection begins but
+not yet reflected in the list.

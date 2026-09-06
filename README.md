@@ -67,6 +67,7 @@ you can check any number yourself.
 | `data-v2.hacs.xyz/<category>/data.json` | The store itself: which repositories exist, in which category, their stars, description, manifest name, integration domain, last release version, open issues, last update | Twice a day, one request per category, no token |
 | `analytics.home-assistant.io/custom_integrations.json` | Installation counts per integration domain, per version | Twice a day, one request, no token |
 | GitHub GraphQL + the star history endpoint | Archived state, releases, commit counts, forks, licence, and the daily star series | Twice a day (~90 queries); the star history weekly (~8,400 requests) |
+| The git history of [`hacs/default`](https://github.com/hacs/default) | The day each repository was accepted into HACS | Twice a day, a 5.7 MB clone, no token |
 
 **Column by column**
 
@@ -86,7 +87,8 @@ you can check any number yourself.
 | **Release rhythm** | Buckets on that same count: 12 or more continuous, 4 or more regular, 1 or more occasional, none in the year dormant, and never published a release at all shows as never. The thresholds are the corpus quartiles (median 4 a year, P75 13, P90 27), not round numbers. |
 | **Commits / year and quarter** | GitHub GraphQL, counted on the default branch since a timestamp — not a rate, an actual count. |
 | **Real momentum** | The percentile rank of star growth and of installation growth, ranked on the **lower** of the two, so a repository has to be strong in both. Both component ranks get their own column: a placement is never a black box. |
-| **New in HACS** | The first daily slice a repository appears in. It is derived from the history rather than stored, so it cannot drift out of step with it. |
+| **In HACS since** | The first commit that added the repository to the lists in `hacs/default` — exact back to 20 October 2019 and matching 4,171 of 4,193 repositories. The 22 without a date are HACS itself, which is not in its own list, and repositories renamed on GitHub since. Everything stamped with 20 October 2019 is shown as "since the start" rather than dated: that is the day the list was written from an older location, so those were already in HACS and the real date is gone. |
+| **New in HACS** | Ranked by that acceptance date. The first daily slice a repository appears in is kept as a fallback for anything the list has not caught up with. |
 | **Downloads** | The release asset counter from the HACS dataset. Only 33 % of repositories have one, because HACS installs from source when a release carries no assets. Shown, never ranked on. |
 | **Rank number** | The position in the current view's full ranking, assigned before your search and filters are applied — so a search result also tells you where it stands. |
 
