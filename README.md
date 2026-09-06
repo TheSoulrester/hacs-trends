@@ -1,5 +1,10 @@
 # HACS Trends
 
+### → **[thesoulrester.github.io/hacs-trends](https://thesoulrester.github.io/hacs-trends/)**
+
+[![Collect and publish](https://github.com/TheSoulrester/hacs-trends/actions/workflows/sync.yml/badge.svg)](https://github.com/TheSoulrester/hacs-trends/actions/workflows/sync.yml)
+[![Refresh star history](https://github.com/TheSoulrester/hacs-trends/actions/workflows/refresh-stars.yml/badge.svg)](https://github.com/TheSoulrester/hacs-trends/actions/workflows/refresh-stars.yml)
+
 Which Home Assistant custom repositories are gaining ground — and which look abandoned.
 
 A trend dashboard for all **4,193 repositories** in the [HACS](https://hacs.xyz) store.
@@ -116,6 +121,11 @@ because it falls out of the first slice a repository appears in, so nothing can 
 4. *Settings → Secrets → Actions* → add `STAR_HISTORY_TOKEN` (only needed for the weekly
    star refresh).
 5. *Actions → Collect and publish → Run workflow* once to prime it.
+
+The site appears at `https://<account>.github.io/<repo>/` after the first successful
+deployment — before that the address returns 404, because the Pages site does not exist
+yet. For this repository that is
+<https://thesoulrester.github.io/hacs-trends/>.
 
 For a custom domain, put the hostname in `web/CNAME` and point a DNS `CNAME` record at
 `<account>.github.io`. GitHub issues the certificate. No hosting needed.
