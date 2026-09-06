@@ -82,10 +82,20 @@ function iconHtml(r) {
   return '<span class="ic fb" aria-hidden="true">' + (CAT_MARK[r.c] || "\u25C6") + "</span>";
 }
 
+/* GitHub Pages serves everything with max-age=600, so a browser that loaded the page
+   ten minutes before a deploy will happily use its stored copy without asking. For the
+   two files that change with every run that is wrong, and "no-cache" does not mean "do
+   not cache" - it means revalidate first, which costs one conditional request and
+   returns 304 with no body when nothing changed. index.html and app.js are kept
+   consistent by the build stamp the workflow writes instead. */
+var FRESH = { cache: "no-cache" };
+
 var WINDOWS = [7, 30, 90, 365];
-/* Must match --row in the stylesheet: the renderer positions rows absolutely and
-   cannot ask the DOM for a height it has not drawn yet. */
-var ROWH = 56;
+/* Must match --row in the stylesheet: the renderer positions rows absolutely and cannot
+   ask the DOM for a height it has not drawn yet. The phone layout is a card, not a table
+   row, and needs the space. */
+function narrow() { return innerWidth <= 900; }
+function rowH() { return narrow() ? 96 : 56; }
 
 /* ----------------------------------------------------------------- views --- */
 var VIEWS = {
@@ -142,6 +152,9 @@ var RH_ORDER = { continuous: 0, regular: 1, occasional: 2, dormant: 3, never: 4 
 var DATA = null, ROWS = [], VIEW = [], view = "trending", win = 30;
 var sortKey = null, sortDir = -1, query = "", cat = null, rhythm = null;
 var viewport, spacer, pool = [], maxInstall = 1;
+/* The ranked list depends on the view, the window and the sort - not on what is typed
+   into the search box. Re-sorting 4,193 rows on every keystroke was work thrown away. */
+var baseList = null, baseKey = "", renderGen = 0;
 /* Lowercasing 4,193 descriptions on every keystroke costs 79 ms, measured. The same
    search against a prepared haystack costs 3.5 ms; building it costs 213 ms once, in
    idle time after the first paint. Until it exists, the old path answers - a search
@@ -150,8 +163,16 @@ var INDEXED = false;
 function buildIndex() {
   for (var i = 0; i < ROWS.length; i++) {
     var r = ROWS[i];
+    var slug = r.n.toLowerCase();
     r._k = (r.n + " " + (r.t || "") + " " + (r.dom || "")).toLowerCase();
     r._d = (r.d || "").toLowerCase();
+    /* The suggestion list needs the fields separately, to tell a name that STARTS with
+       the query from one that merely contains it. Lowercasing them here rather than on
+       every keystroke: the same 4,193-row mistake the search itself used to make. */
+    r._sl = slug;
+    r._sn = slug.slice(slug.indexOf("/") + 1);
+    r._n2 = (r.t || r._sn).toLowerCase();
+    r._dm = (r.dom || "").toLowerCase();
   }
   INDEXED = true;
 }
@@ -195,18 +216,24 @@ function computeMomentum(w) {
 function apply() {
   var v = VIEWS[view];
   if (view === "momentum") computeMomentum(win);
+  renderGen++;
   ROWS.forEach(function (r) { r._rh = RH_ORDER[r.rh] === undefined ? 9 : RH_ORDER[r.rh]; });
   /* The ranking is numbered BEFORE the user's filters are applied, so a search result
      keeps the place it holds in the whole list: finding a repository at 412 tells you
      something that finding it at 1 does not. Only the view's own eligibility rule
      (an installation figure, a growth figure) takes part in the numbering - a row that
      cannot be ranked at all has no place to keep. */
-  var base = ROWS.filter(function (r) { return !v.filter || v.filter(r, win); });
   var key = sortKey || v.sort(win);
-  var str = key === "n" || key === "c";
-  var dir = sortDir;
-  var tie = (!sortKey && v.tie) ? v.tie : null;
-  base.sort(function (a, b) {
+  var bk = [view, win, key, sortDir, LOCALE].join("|");
+  var base;
+  if (baseList && baseKey === bk) {
+    base = baseList;
+  } else {
+    base = ROWS.filter(function (r) { return !v.filter || v.filter(r, win); });
+    var str = key === "n" || key === "c";
+    var dir = sortDir;
+    var tie = (!sortKey && v.tie) ? v.tie : null;
+    base.sort(function (a, b) {
     var x = a[key], y = b[key];
     var ax = x === undefined || x === null, ay = y === undefined || y === null;
     /* Rows without a value sink in BOTH directions - otherwise an ascending sort
@@ -219,7 +246,9 @@ function apply() {
     if (d === 0 && tie) return tie(a, b);
     return d;
   });
-  for (var i = 0; i < base.length; i++) base[i]._rank = i + 1;
+    for (var i = 0; i < base.length; i++) base[i]._rank = i + 1;
+    baseList = base; baseKey = bk;
+  }
 
   var q = query.trim().toLowerCase();
   VIEW = (q || cat || rhythm) ? base.filter(function (r) {
@@ -305,6 +334,62 @@ function cell(c, r, idx) {
   return "";
 }
 
+/* -------------------------------------------------------------- the card ---
+ * A phone gets one figure in large type - the one the current view ranks by - because a
+ * ranking whose reason is not visible is just a list. Everything else stays, in the size
+ * it deserves. */
+function bigFor(r) {
+  switch (view) {
+    case "breakout": {
+      var p = r["p" + win];
+      return { v: p === undefined ? na() : '<span class="delta ' + (p > 0 ? "p" : p < 0 ? "n" : "") +
+        '">' + (p > 0 ? "+" : "") + n(Math.round(p * 10) / 10) + "%</span>", k: t("window." + win) };
+    }
+    case "installed":
+      return { v: r.inst === undefined ? na(t("hint.integrationsOnly"))
+        : '<span class="num">' + n(r.inst) + "</span>", k: t("col.installs") };
+    case "momentum":
+      return { v: r._mom === undefined ? na() : '<span class="num">' + r._mom + "</span>",
+        k: t("view.momentum.title") };
+    case "ships":
+      return { v: r.ry === undefined ? na()
+        : '<span class="num">' + n(r.ry) + (r.ryc ? "+" : "") + "</span>", k: t("col.releases") };
+    case "maintenance":
+      return { v: '<span class="num h-' + r.h + '">' + esc(rel(r.lu) || "-") + "</span>",
+        k: t("col.lastCommit") };
+    default:
+      return { v: delta(r["d" + win]), k: t("window." + win) };
+  }
+}
+
+/* Two values under the description, never three: a third one wraps to a second line on a
+   360px screen for exactly those repositories that have installation figures, and a row
+   whose height depends on whether a number happens to exist looks broken. Whatever the
+   big figure already says is left out, and the rest is taken in order of usefulness. */
+function subFor(r) {
+  var out = [];
+  if (view !== "maintenance") out.push(dotline("h-" + r.h, rel(r.lu) || t("health." + r.h)));
+  if (r.s !== undefined) out.push("<span>" + n(r.s) + "\u2605</span>");
+  if (view !== "installed" && r.inst !== undefined) {
+    out.push("<span>" + n(r.inst) + " " + esc(t("unit.installsShort")) + "</span>");
+  }
+  return out.slice(0, 2).join("");
+}
+
+function cardHtml(r, idx) {
+  var b = bigFor(r);
+  return '<div class="mcard"><span class="rn">' + (r._rank || idx + 1) + "</span>" +
+    iconHtml(r) +
+    '<span class="mbody"><span class="l1">' +
+    '<a href="https://github.com/' + esc(r.n) + '" target="_blank" rel="noopener">' +
+    esc(r.t || r.n.split("/")[1]) + "</a>" +
+    (r.v ? '<span class="ver">' + esc(r.v) + "</span>" : "") + "</span>" +
+    '<span class="mdesc">' + (r.d ? esc(r.d) : "") + "</span>" +
+    '<span class="msub">' + subFor(r) + "</span></span>" +
+    '<span class="mbig"><span class="bv">' + b.v + '</span><span class="bk">' +
+    esc(b.k) + "</span></span></div>";
+}
+
 /* ------------------------------------------------------------- rendering --- */
 function visibleCols() {
   return VIEWS[view].cols.filter(function (c) {
@@ -321,7 +406,7 @@ function tpl() { return visibleCols().map(function (c) { return COLS[c].w; }).jo
    71,405 DOM nodes, measured. On that layout the page itself scrolls, so the window is
    read from where the spacer sits relative to the screen. */
 function metrics() {
-  if (innerWidth <= 900) {
+  if (narrow()) {
     var r = spacer.getBoundingClientRect();
     return { top: Math.max(0, -r.top), h: innerHeight };
   }
@@ -329,7 +414,7 @@ function metrics() {
 }
 
 function render() {
-  var cols = visibleCols(), grid = tpl(), h = ROWH;
+  var cols = visibleCols(), grid = tpl(), h = rowH(), card = narrow();
   spacer.style.height = (VIEW.length * h) + "px";
   if (!VIEW.length) {
     spacer.innerHTML = '<div class="empty">' + esc(t("foot.empty")) + "</div>"; pool = []; return;
@@ -339,22 +424,44 @@ function render() {
   var first = Math.max(0, Math.floor(top / h) - 4);
   var last = Math.min(VIEW.length, Math.ceil((top + m.h) / h) + 4);
   var need = last - first;
-  while (pool.length < need) {
-    var el = document.createElement("div"); el.className = "row";
-    spacer.appendChild(el); pool.push(el);
+  /* Two spare slots so a row leaving the top and one arriving at the bottom never
+     compete for the same element. */
+  var want = need + 2;
+  if (pool.length < want) {
+    while (pool.length < want) {
+      var el = document.createElement("div"); el.className = "row";
+      spacer.appendChild(el); pool.push(el);
+    }
+    renderGen++;  // the modulo mapping below moved, so every slot is stale
   }
-  for (var i = 0; i < pool.length; i++) {
-    var node = pool[i];
-    /* Emptying the surplus as well: a row that is hidden but still carries the old
-       repository is one CSS rule away from being a phantom duplicate on screen. */
-    if (i >= need) { if (!node.hidden) { node.hidden = true; node.innerHTML = ""; } continue; }
-    var idx = first + i, r = VIEW[idx];
+  var size = pool.length, used = {};
+
+  /* Rows keep their element while they stay on screen. Scrolling one row used to rewrite
+     all thirty of them; with the slot chosen by index modulo pool size, only the one that
+     actually entered the window is written. The generation counter invalidates everything
+     at once when the data, the columns or the pool size change. */
+  var written = [];
+  for (var idx = first; idx < last; idx++) {
+    var slot = idx % size;
+    used[slot] = 1;
+    var node = pool[slot];
+    if (node._idx === idx && node._gen === renderGen) continue;
+    var r = VIEW[idx];
+    node._idx = idx; node._gen = renderGen;
     node.hidden = false;
     node.style.top = (idx * h) + "px";
-    node.style.gridTemplateColumns = grid;
-    node.innerHTML = cols.map(function (c) {
+    node.style.gridTemplateColumns = card ? "" : grid;
+    node.innerHTML = card ? cardHtml(r, idx) : cols.map(function (c) {
       return '<div class="cell' + (COLS[c].right ? " r" : "") + '">' + cell(c, r, idx) + "</div>";
     }).join("");
+    written.push(node);
+  }
+  for (var i = 0; i < size; i++) {
+    /* Emptying the surplus as well: a row that is hidden but still carries the old
+       repository is one CSS rule away from being a phantom duplicate on screen. */
+    if (!used[i] && !pool[i].hidden) {
+      pool[i].hidden = true; pool[i].innerHTML = ""; pool[i]._idx = -1;
+    }
   }
   /* The version must not shrink, so the path absorbs every missing pixel and can end up
      as a two-pixel sliver of ellipsis - noise where a path used to be. Below the width
@@ -363,9 +470,10 @@ function render() {
      the reading loop invalidates the layout and forces the browser to compute it again
      for the next read, which measured 26 ms per render against 9 ms for the same work
      split in two. */
+  if (card) return;
   var slugs = [], widths = [];
-  for (var j = 0; j < need; j++) {
-    var sl = pool[j].querySelector(".slug");
+  for (var j = 0; j < written.length; j++) {
+    var sl = written[j].querySelector(".slug");
     if (sl) slugs.push(sl);
   }
   for (j = 0; j < slugs.length; j++) widths.push(slugs[j].getBoundingClientRect().width);
@@ -449,25 +557,36 @@ function renderHead() {
 
 /* Four figures that change with the view - the point of a console strip is that it
    answers the question you just asked, not that it shows the same four numbers. */
+/* Counts over the whole corpus never change. Recomputing four of them on every
+   keystroke was four more passes over 4,193 rows for an unchanging number. */
+var STRIP_CACHE = {};
+function corpus(key, fn) {
+  if (STRIP_CACHE[key] === undefined) {
+    var c = 0;
+    for (var i = 0; i < ROWS.length; i++) if (fn(ROWS[i])) c++;
+    STRIP_CACHE[key] = c;
+  }
+  return STRIP_CACHE[key];
+}
+
 function renderStrip() {
   var m = DATA.meta, s = [];
   function sum(key) { return VIEW.reduce(function (a, r) { return a + (r[key] || 0); }, 0); }
-  function count(fn) { return ROWS.filter(fn).length; }
   if (view === "trending" || view === "breakout" || view === "fresh") {
     s = [["strip.starsGiven", "+" + n(sum("d" + win)), "pos"],
          ["strip.moving", n(VIEW.filter(function (r) { return r["d" + win]; }).length)],
-         ["strip.dormantYear", n(count(function (r) { return (r.age || 0) > 365; })), "warn"],
+         ["strip.dormantYear", n(corpus("dormantYear", function (r) { return (r.age || 0) > 365; })), "warn"],
          ["strip.withInstalls", n(m.analytics.matched)]];
   } else if (view === "installed" || view === "momentum") {
     s = [["strip.installsTotal", n(sum("inst"))],
          ["strip.withInstalls", n(VIEW.length)],
-         ["strip.ambiguous", n(count(function (r) { return r.amb; })), "warn"],
-         ["strip.adoptionKnown", n(count(function (r) { return r.va !== undefined; }))]];
+         ["strip.ambiguous", n(corpus("ambiguous", function (r) { return r.amb; })), "warn"],
+         ["strip.adoptionKnown", n(corpus("adoptionKnown", function (r) { return r.va !== undefined; }))]];
   } else {
-    s = [["strip.continuous", n(count(function (r) { return r.rh === "continuous"; })), "pos"],
-         ["strip.regular", n(count(function (r) { return r.rh === "regular"; }))],
-         ["strip.noReleaseYear", n(count(function (r) { return r.rh === "dormant"; })), "warn"],
-         ["strip.noRelease", n(count(function (r) { return r.rh === "never"; })), "warn"]];
+    s = [["strip.continuous", n(corpus("rhContinuous", function (r) { return r.rh === "continuous"; })), "pos"],
+         ["strip.regular", n(corpus("rhRegular", function (r) { return r.rh === "regular"; }))],
+         ["strip.noReleaseYear", n(corpus("rhDormant", function (r) { return r.rh === "dormant"; })), "warn"],
+         ["strip.noRelease", n(corpus("rhNever", function (r) { return r.rh === "never"; })), "warn"]];
   }
   $("strip").innerHTML = s.map(function (x) {
     var color = x[2] === "pos" ? "var(--pos)" : x[2] === "warn" ? "var(--stale)" : "var(--ink)";
@@ -508,17 +627,24 @@ var SUG = [], sugSel = -1;
 function suggest(raw) {
   var q = raw.trim().toLowerCase();
   if (q.length < 2) return [];
+  if (!INDEXED) return [];
+  /* A two-letter query matches thousands of rows. Collecting them all and sorting was
+     the most expensive thing a keystroke did; only eight of them are ever shown, so the
+     best eight are kept as we go and nothing else is allocated. */
   var head = [], tail = [];
+  function keep(list, r) {
+    var v = r.s || 0;
+    if (list.length === 8 && v <= (list[7].s || 0)) return;
+    var i = list.length;
+    while (i > 0 && (list[i - 1].s || 0) < v) i--;
+    list.splice(i, 0, r);
+    if (list.length > 8) list.pop();
+  }
   for (var i = 0; i < ROWS.length; i++) {
     var r = ROWS[i];
-    var nm = (r.t || r.n.split("/")[1]).toLowerCase();
-    var slug = r.n.toLowerCase(), sn = slug.split("/")[1] || "";
-    var dom = (r.dom || "").toLowerCase();
-    if (nm.indexOf(q) === 0 || sn.indexOf(q) === 0 || dom.indexOf(q) === 0) head.push(r);
-    else if (nm.indexOf(q) >= 0 || slug.indexOf(q) >= 0 || dom.indexOf(q) >= 0) tail.push(r);
+    if (r._n2.indexOf(q) === 0 || r._sn.indexOf(q) === 0 || r._dm.indexOf(q) === 0) keep(head, r);
+    else if (r._n2.indexOf(q) >= 0 || r._sl.indexOf(q) >= 0 || r._dm.indexOf(q) >= 0) keep(tail, r);
   }
-  function pop(a, b) { return (b.s || 0) - (a.s || 0); }
-  head.sort(pop); tail.sort(pop);
   return head.concat(tail).slice(0, 8);
 }
 function renderSuggest() {
@@ -571,6 +697,7 @@ function paint() {
     el.textContent = t(el.dataset.i18n);
   });
   $("q").placeholder = t("filter.searchPlaceholder");
+  $("disclose").textContent = t("mobile.info");
   $("brand-sub").textContent = t("app.repoStamp", {
     n: n(DATA.meta.counts.repos), date: dt(DATA.meta.day)
   });
@@ -582,7 +709,7 @@ function loadLocale(code) {
   try { localStorage.setItem("lang", code); } catch (e) {}
   if (code === "en") { L = {}; paint(); return; }
   if (BUNDLED) { L = BUNDLED[code] || {}; paint(); return; }
-  fetch("./i18n/" + code + ".json").then(function (r) { return r.json(); })
+  fetch("./i18n/" + code + ".json", FRESH).then(function (r) { return r.json(); })
     .then(function (j) { L = j; paint(); }).catch(function () { L = {}; paint(); });
 }
 
@@ -592,7 +719,9 @@ function boot(data) {
   viewport.addEventListener("scroll", render, { passive: true });
   /* The narrow layout scrolls the page, not the viewport element. */
   addEventListener("scroll", function () { if (innerWidth <= 900) render(); }, { passive: true });
-  addEventListener("resize", function () { pool = []; spacer.innerHTML = ""; buildHead(); render(); });
+  addEventListener("resize", function () {
+    pool = []; spacer.innerHTML = ""; renderGen++; buildHead(); render();
+  });
   /* Error events do not bubble, but they do capture. One listener, no inline handler,
      and a domain that 404s is asked for exactly once. */
   spacer.addEventListener("error", function (e) {
@@ -604,6 +733,16 @@ function boot(data) {
     box.setAttribute("aria-hidden", "true");
     box.textContent = CAT_MARK[box.dataset.cat] || "\u25C6";
   }, true);
+  /* One line on the phone standing in for the explanation and the four summary figures,
+     which together used to push the first row two thirds of the way down the screen. */
+  var dis = $("disclose");
+  dis.hidden = false;
+  dis.onclick = function () {
+    var open = document.body.classList.toggle("info-open");
+    dis.setAttribute("aria-expanded", open ? "true" : "false");
+    render();
+  };
+
   var qi = $("q");
   qi.addEventListener("input", function (e) {
     query = e.target.value;
@@ -627,7 +766,7 @@ function boot(data) {
   sel.onchange = function () { loadLocale(sel.value); };
   var idle = window.requestIdleCallback || function (f) { return setTimeout(f, 250); };
   if (BUNDLED) { EN = BUNDLED.en || {}; loadLocale(start); idle(buildIndex); return; }
-  fetch("./i18n/en.json").then(function (r) { return r.json(); })
+  fetch("./i18n/en.json", FRESH).then(function (r) { return r.json(); })
     .then(function (j) { EN = j; loadLocale(start); })
     .catch(function () { EN = {}; loadLocale("en"); })
     .then(function () { idle(buildIndex); });
@@ -636,7 +775,7 @@ function boot(data) {
 var el = document.getElementById("inline-data");
 var inline = el ? el.textContent.trim() : "";
 if (inline) boot(JSON.parse(inline));
-else fetch("./data.json").then(function (r) { return r.json(); }).then(boot).catch(function () {
+else fetch("./data.json", FRESH).then(function (r) { return r.json(); }).then(boot).catch(function () {
   document.getElementById("spacer").innerHTML =
     '<div class="empty">data.json not found. Run <code>./run.sh export</code> first.</div>';
 });

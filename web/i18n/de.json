@@ -54,6 +54,8 @@
   "unit.days": "{n} T", "unit.now": "gerade eben", "unit.min": "{n} Min.", "unit.hours": "{n} Std.",
   "unit.months": "{n} Mon.", "unit.ago": "vor {v}", "unit.perYear": "{n}/J",
 
+  "unit.installsShort": "Inst.",
+  "mobile.info": "Was diese Sicht zeigt · 4 Kennzahlen",
   "hint.noValue": "Kein Wert verfügbar",
   "hint.version": "Neuestes von HACS gemeldetes Release.",
   "hint.rankKept": "Platz in der ungefilterten Rangliste dieser Sicht.",

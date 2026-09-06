@@ -561,3 +561,117 @@ width and hiding an element in the same loop invalidates the layout before the n
 and made the browser recompute it twenty times — **26 ms per render against 9 ms** for the
 same work split into a read pass and a write pass. With the split, the probe costs
 nothing measurable (8.4–9.6 ms against 8.0–9.8 ms over three runs).
+
+### 12.10 Cache: a stale page after a deploy
+
+GitHub Pages serves every file with `Cache-Control: max-age=600` and an ETag. Within
+those ten minutes a browser reuses what it has without asking, which is why a fresh
+deploy can still show the old page — and why Safari in particular keeps `app.js` across
+an ordinary reload.
+
+Ten minutes of old numbers is harmless. Ten minutes of **yesterday's `index.html` against
+today's `app.js`** is not: the two are built together and can break each other. Two
+changes, one for each half:
+
+- `data.json` and the translation files are fetched with `cache: "no-cache"`, which does
+  not mean "do not cache" but "revalidate first" — one conditional request, answered with
+  304 and no body when nothing changed. Verified: the browser now sends `max-age=0` for
+  those three and nothing for `app.js`.
+- The workflow stamps the script reference in the deployed `index.html` with the first
+  eight characters of the commit sha. An old HTML asks for the `app.js` it was built
+  against, a new one for the new file, and neither can be answered from the cache with
+  the other. The repository copy keeps the plain `./app.js`, so nothing changes locally.
+
+### 12.11 The version stands in a column
+
+Right-aligned within the repository cell. Placed behind the path it landed wherever the
+path happened to end, and a number that moves on every row cannot be read by scanning.
+
+That exposed a second defect: the name could not shrink, so on a long name it pushed the
+version past the cell edge, where `overflow:hidden` cut it off — the one thing the whole
+arrangement was supposed to prevent. The shrink order is now explicit: the path gives way
+first (weighted a hundred to one), the name only after the path is gone, the version
+never. Measured at 1920, 1600, 1440, 1280 and 1000 px: one right edge per width, nothing
+overhanging the cell.
+
+### 12.12 Mobile, round two
+
+A tester's phone froze on the site the night before the narrow-layout fix shipped, on the
+build that still put all 4,193 rows in the DOM. That build is gone, but the report was
+worth measuring properly rather than declaring solved, so the current one was profiled in
+a 390x844 context at 1x, 4x and 8x CPU throttling.
+
+The DOM was fine — 34 rows, 850 nodes, 11 MB heap. Scrolling was not: **every scroll event
+rewrote all thirty-odd rows**, because the pool assigned element *i* to row *first + i*,
+so a one-row scroll changed the content of every element.
+
+Rows now keep their element while they stay on screen: the slot is the row index modulo
+the pool size, so scrolling by one row rewrites one row. A generation counter invalidates
+every slot at once when the data, the columns or the pool size change.
+
+| CPU | before | after |
+|---|---|---|
+| 1x | 8.7 ms | **2.4 ms** |
+| 4x | 44.6 ms | **11.3 ms** |
+| 8x | 103.9 ms | **29.1 ms** |
+
+(Median over 30 scroll steps, with the scroll position committed before the event so the
+figure is the real render and not a no-op. Output verified identical: 37 rows, every rank
+matching its position, no duplicates.)
+
+Three more passes over the corpus were being repeated per keystroke and are now not:
+
+- the ranked base list is cached against view, window, sort and locale — it does not
+  depend on what is typed;
+- the suggestion list kept every match and sorted it, which for a two-letter query meant
+  sorting thousands to show eight. It now keeps the best eight as it scans;
+- the summary strip recomputed four corpus-wide counts that never change.
+
+A keystroke on the throttled device went from 88-238 ms to 44-188 ms; the remaining cost
+is the filter itself over 4,193 rows, which is the honest price of searching descriptions.
+
+### 12.13 Considered and rejected
+
+A per-repository permalink (`?repo=owner/name`) showing a single card — last commit,
+release rhythm, installations, version spread — to serve the "should I install this one
+thing" question rather than the browsing one. Raised after a tester said he never browses
+HACS and only ever installs something specific. **Not for this project.** HACS Trends
+answers ranking questions; the single-repository lookup is a different tool.
+
+### 12.14 The phone gets its own layout
+
+The table could not survive on a phone and had not been looked at since it was built. Its
+columns are fixed pixels adding up to 694, so on a 390px screen the browser widened the
+document to **720px** and shrank the whole page: half the columns past the right edge,
+everything unreadably small, two-axis scrolling. On top of that the header — title,
+four-line explanation, period strip, search, language picker, four summary tiles, column
+headings — pushed the first row to **539px down an 844px screen**.
+
+Below 900px there is now no grid at all. Each row is a card that lays itself out:
+
+- the figure the current view ranks by, in the largest type, on the right, with its own
+  label — a ranking whose reason is invisible is just a list. It follows the view: star
+  growth in the trend views, installations in "Actually used", releases in "Ships
+  reliably", the last commit in the maintenance view;
+- name and version on the first line, two lines of description, and **two** further values
+  underneath, never three: a third one wraps for exactly those repositories that have
+  installation figures, and a row whose height depends on whether a number happens to
+  exist looks broken. Whatever the big figure already says is left out;
+- the view chooser becomes scrolling chips, the heading disappears (the active chip
+  already says it), the language picker moves up beside the brand, and the explanation
+  plus the four summary figures fold behind one line.
+
+| | before | after |
+|---|---|---|
+| document width at 390px | 720px | **390px** |
+| first row | 539px | **262px** |
+| rows visible | ~2 (scaled down) | **7** |
+
+Checked at 360, 390 and 768px, in all seven views, in German (the longer labels), scrolled
+deep into the list: no card overflows its height, no horizontal scrolling anywhere, no
+console errors. The desktop layout is untouched — above 900px the same renderer still
+produces the table.
+
+Deliberate loss: the column headings are gone on a phone, and with them the ability to
+re-sort by tapping one. Each view has a sensible sort of its own; a sort control for
+phones would be its own piece of work.

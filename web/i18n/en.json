@@ -54,6 +54,8 @@
   "unit.days": "{n} d", "unit.now": "just now", "unit.min": "{n} min", "unit.hours": "{n} h",
   "unit.months": "{n} mo", "unit.ago": "{v} ago", "unit.perYear": "{n}/yr",
 
+  "unit.installsShort": "inst",
+  "mobile.info": "What this view shows · 4 figures",
   "hint.noValue": "No figure available",
   "hint.version": "Newest release reported by HACS.",
   "hint.rankKept": "Position in this view's unfiltered ranking.",

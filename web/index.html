@@ -120,18 +120,23 @@ button{font:inherit;color:inherit;background:none;border:none}
 .cell.r{text-align:right}
 .rn{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-4)}
 .repo{display:flex;align-items:center;gap:10px;min-width:0}
+/* Shrink order when the cell runs out of room: the path first (weighted heavily), the
+   name only after the path is gone, the version never. A name that could not shrink used
+   to push the version out of the cell and get it clipped. */
 .repo a{font-size:13.5px;font-weight:600;color:var(--ink);text-decoration:none;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;max-width:100%}
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;max-width:100%}
 .repo a:hover{color:var(--accent);text-decoration:underline}
 .repo .slug{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-4);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1}
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:100}
 .stack{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
 .l1{display:flex;align-items:baseline;gap:8px;min-width:0}
 /* The version never shrinks; the path gives up its characters instead. A truncated
-   path still identifies the repository, a truncated version number does not. */
+   path still identifies the repository, a truncated version number does not. Pinned to
+   the right edge so it stands in one column down the whole table instead of landing
+   wherever the path happens to end - a number that moves on every row cannot be read
+   by scanning. */
 .ver{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-3);
-  flex-shrink:0;white-space:nowrap}
-.ver::before{content:"\00B7";color:var(--ink-4);margin-right:6px}
+  flex-shrink:0;white-space:nowrap;margin-left:auto;padding-left:14px;text-align:right}
 .desc{color:var(--ink-3);font-size:11.5px;line-height:1.35;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Icons come from brands.home-assistant.io, which has one for 2,138 of the 4,193
@@ -170,17 +175,77 @@ button{font:inherit;color:inherit;background:none;border:none}
 .foot .hl{color:var(--ink-2)}
 
 @media (max-width:1240px){ .hide-md{display:none!important} }
+/* ---------------- phone ----------------
+   The table cannot survive here: its columns are fixed pixels and add up to 694, so on a
+   390px screen the browser widened the document to 720 and shrank the whole page - half
+   the columns off the edge and everything unreadably small. Below 900px there is no grid
+   at all; each row becomes a card that lays itself out, with the figure the current view
+   ranks by given the largest type. The explanation and the four summary figures fold away
+   behind one line, which is what moved the first row from 539px down the screen to 232. */
 @media (max-width:900px){
+  :root{--row:96px}
   body{flex-direction:column;overflow:auto;height:auto}
   .rail{width:100%;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;
     border-right:none;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:9}
-  .brand{border-bottom:none;padding:12px 16px}
-  .nav{flex-direction:row;overflow-x:auto;flex:1;padding:8px}
+  .brand{border-bottom:none;padding:11px 14px 9px}
+  .brand .n{font-size:15px}
+  .nav{flex-direction:row;overflow-x:auto;flex:1 0 100%;padding:0 14px 9px;gap:6px;
+    scrollbar-width:none}
+  .nav::-webkit-scrollbar{height:0}
+  .nav button{width:auto;white-space:nowrap;border:1px solid var(--line-2);border-radius:14px;
+    padding:6px 12px;min-height:32px;font-size:12px}
+  .nav button[aria-current="true"]{border-color:var(--raise)}
+  .nav svg{display:none}
   .railsec,.railfoot{display:none}
   .main{height:auto}
-  .strip{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .hide-sm{display:none!important}
+
+  /* The view's name is already on the chip that is switched on, so the heading would say
+     it a second time and cost a line of screen. The language picker moves up beside the
+     brand, which is where the space is - the rail is sticky, so fixed keeps it in place. */
+  .head{flex-direction:column;align-items:stretch;gap:9px;padding:11px 14px}
+  .head .t{flex:1 1 auto;gap:0}
+  .head h1{display:none}
+  .head p{display:none}
+  .langsel{position:fixed;top:10px;right:14px;z-index:10}
+  .langsel select{padding:5px 7px;font-size:11px;min-height:34px}
+  .seg{width:100%}
+  .seg button{flex:1;text-align:center;padding:9px 0;min-height:38px}
+  .search{width:100%}
+  .search input{width:100%;padding:10px 11px 10px 30px;min-height:40px}
+  .ac{width:100%}
+
+  .disclose{display:flex!important;align-items:center;gap:7px;width:100%;padding:10px 14px;
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--panel);
+    color:var(--ink-3);font-size:11.5px;cursor:pointer;text-align:left;min-height:38px}
+  .disclose::before{content:"\25B8";color:var(--ink-4)}
+  .disclose[aria-expanded="true"]::before{content:"\25BE"}
+  body.info-open .head p{display:block;font-size:12.5px}
+  .strip{display:none}
+  body.info-open .strip{display:grid;grid-template-columns:1fr 1fr}
+  .stat{padding:9px 14px}
+  .stat .v{font-size:16px}
+  .thead{display:none}
   .viewport{overflow:visible;height:auto}
+
+  .row{display:block;padding:0;border-bottom:1px solid #171e25}
+  .mcard{display:flex;gap:10px;padding:11px 14px;height:var(--row);align-items:flex-start}
+  .mcard .rn{width:19px;flex-shrink:0;padding-top:8px;text-align:right}
+  .mcard .ic{width:34px;height:34px;margin-top:2px}
+  .mbody{min-width:0;flex:1;display:flex;flex-direction:column}
+  .mbody .l1{display:flex;align-items:baseline;gap:8px;min-width:0}
+  .mbody a{font-size:14.5px;font-weight:600;color:var(--ink);text-decoration:none;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mbody .ver{margin-left:auto;padding-left:8px}
+  .mdesc{color:var(--ink-3);font-size:12px;line-height:1.4;margin-top:1px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .msub{display:flex;flex-wrap:nowrap;gap:12px;margin-top:auto;padding-top:5px;overflow:hidden;
+    font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-3);white-space:nowrap}
+  .mbig{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;
+    padding-top:2px;min-width:60px;max-width:96px}
+  .mbig .bv{font-size:17px;font-weight:700}
+  .mbig .bv .delta,.mbig .bv .num{font-size:17px}
+  .mbig .bk{font-family:"JetBrains Mono",monospace;font-size:8px;letter-spacing:.1em;
+    color:var(--ink-4);margin-top:2px;text-align:right;line-height:1.3}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -226,6 +291,7 @@ button{font:inherit;color:inherit;background:none;border:none}
     <span class="langsel"><select id="lang" aria-label="Language"></select></span>
   </div>
 
+  <button class="disclose" id="disclose" aria-expanded="false" hidden></button>
   <div class="strip" id="strip"></div>
   <div class="thead" id="thead"></div>
   <div class="viewport" id="viewport"><div class="spacer" id="spacer"></div></div>

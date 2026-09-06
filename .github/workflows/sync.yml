@@ -95,6 +95,13 @@ jobs:
           echo "::error::Could not push the daily slice after three attempts. If this says 403 rather than rejected, set Settings -> Actions -> General -> Workflow permissions to 'Read and write permissions'. The page was still built and deployed."
           exit 1
 
+      # index.html is cached for ten minutes like everything else, so a visitor can load
+      # yesterday's HTML against today's script. Stamping the reference keeps the pair
+      # consistent: an old index.html asks for the app.js it was built against, a new one
+      # for the new file, and neither can be answered from the cache with the other.
+      - name: Stamp the script reference with the commit
+        run: sed -i "s|\./app\.js|./app.js?v=${GITHUB_SHA::8}|" web/index.html
+
       - uses: actions/upload-pages-artifact@v5
         with:
           path: web
