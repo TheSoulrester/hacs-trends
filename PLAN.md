@@ -735,3 +735,134 @@ day that is not theirs. The 22 without a date show a dash with the reason on the
 
 `first_seen` stays as the fallback for anything accepted after our collection begins but
 not yet reflected in the list.
+
+### 12.17 Local checking
+
+`./run.sh check` runs in seconds without a token or a network: `node --check` on the front
+end, the translation guard (unknown keys, mismatched placeholders, completeness), a
+compile pass over the Python, YAML parsing of both workflows when PyYAML happens to be
+installed, and the collector's test suite. It catches what typing breaks. It does not
+replace opening the page.
+
+What can and cannot be checked before a push, honestly:
+
+- **Front end** — fully, locally, in seconds. Serve `web/` and look; the committed
+  `data.json` is real data.
+- **Collector and export** — with a database. The changed step alone against a copy is
+  usually enough; the full chain is `./run.sh build`, about twelve minutes.
+- **The workflow itself** — not at all beyond YAML syntax. Ordering, action versions and
+  permissions only show up in a real run, and two of this project's failures were exactly
+  that. A branch is the cheap mitigation: the workflow can be dispatched there, and it
+  builds and commits its slice without touching the published page.
+
+`run.sh` also now notices a virtual environment whose interpreter has gone. That happens
+after a Python upgrade, after moving the folder, or — as it did here — when the same
+checkout is used from a second machine and the symlinks end up pointing into the other
+one's filesystem. The directory still exists, so the old check passed and every command
+then failed with "No such file or directory", which reads like a broken script rather than
+a stale link. It is now recreated instead.
+
+## 13. Round three — the header seam, the run stamp, and what the search misses
+
+Six reports, of which two turned out to be defects and one turned out to be a wrong
+assumption worth recording.
+
+### 13.1 Two figures suspected of being hard-coded; one was
+
+The report was that `4,193 repositories` and the growth view's `2,101 of 3,248 matched`
+looked baked in. Neither is: `counts.repos` is `len(repos)` with no filter in front of it,
+`coverage.total` is the same number, and the caption is a template filled from
+`meta.analytics` on each render. Every view was checked the same way.
+
+One number was genuinely written twice. `MIN_PCT_BASE = 25` decides which repositories get
+a growth percentage at all, in `export.py` — and `app.js` printed a literal `25` in the
+caption that explains the cut-off. Two places, one of which would eventually have been
+changed alone, and the page would then have described a rule the figures were not computed
+with. It now travels in `meta.thresholds.min_pct_base`, with the literal kept only as a
+fallback for payloads written before this change.
+
+### 13.2 The header seam
+
+The brand block and the head bar meet at one horizontal border, and it did not line up.
+Measured at 1440px: 89.0px against 81.3px. Both blocks sized themselves from their
+content, so the break was not a constant — it varied with the width, and with the
+language, because `4.193 Repositories · 06. Sept. 2026` wraps inside a 212px rail and the
+English stamp does not.
+
+A shared `--topbar` height with the content centred in it fixes the wide case. It does not
+fix everything: between 900 and roughly 1240px the head bar wraps the search box onto a
+second row and grows past any fixed value. Measured across that band before the change:
+-75.3, -70.5, -24.5, -5.8. CSS cannot tell one block the other's height, so the head is
+measured at its natural height after clearing the property — which leaves the 92px
+stylesheet floor in place — and the brand is told to match. The value written back is the
+height already reached, so it settles in one pass.
+
+Verified at 960, 1024, 1120, 1240, 1360, 1440, 1600 and 1920px, in both languages, across
+all seven views, and under live resizing including a trip through the phone layout and
+back: 0.0px everywhere.
+
+### 13.3 "What this view shows · 4 figures" on the desktop
+
+A missing base rule, not a text. `.disclose` is styled only inside the phone media query,
+where it gets `display:flex!important`. Outside it the element is a plain `<button>`, and
+`boot()` sets `hidden = false` unconditionally, so it rendered under the head bar on every
+desktop, 23px tall. `.disclose{display:none}` in the base sheet; the phone rule carries
+`!important` and still wins there.
+
+### 13.4 A run stamp instead of a date
+
+The stamp said `06. Sept. 2026` and left the reader to decide whether that was today. It
+now reads `Letzter Lauf vor 3 Stunden`, from `generated_at` against the reader's own clock,
+with the exact local time on the tooltip. The long forms come from
+`Intl.RelativeTimeFormat` rather than the translation files: the table's own units are
+clipped for a column ("3 T"), which reads badly as a sentence in the rail.
+
+What happens when the collector stops was checked rather than assumed. `sync.yml` has no
+`continue-on-error` on the collecting step, so a failure aborts the job and nothing is
+deployed: the page keeps its last good `data.json` and the stamp ages in place, which is
+the honest outcome and the one wanted.
+
+The case the run stamp cannot cover on its own is a green run whose newest snapshot is
+older than the run itself — the page is fresh, the data is not. Then, and only then, a
+third line appears in the warning colour: `Daten vom 03. Sept. 2026`. It is driven by
+comparing `meta.day` against the date part of `generated_at`, and it stays hidden when they
+agree, which is the normal case.
+
+### 13.5 The footer points at the repository
+
+`Wie die Zahlen entstehen →` gave way to `GitHub →` on the project repository. The sources
+line above it stays plain text: the "GitHub" in `HACS · Home Assistant analytics · GitHub`
+names a data source, and hanging the project's own link on that word would send the reader
+somewhere the word does not promise.
+
+### 13.6 Search: topics in, and the multi-word case
+
+The search already covered the description — the assumption that it did not was wrong. The
+gap was GitHub topics, which sit in the payload as `tp` on 3,776 of 4,193 repositories and
+were never indexed. Measured: "skoda" 1 → 2, "heatpump" 14 → 24, "solar" 99 → 137, at
++136 kB of haystack.
+
+What they mostly buy is a spelling gap rather than hidden knowledge. The rows that "heatpump"
+newly finds are `Quatt`, `Lambda Heat Pumps`, `Heat Pump Card`, `Qvantum Heat Pump` — all of
+them self-evident from the name, missing only because the description writes "heat pump" with
+a space and the topic does not. That measurement killed a planned feature: chips in the row
+showing which topic matched. They would have explained what the row already says. The
+genuine oddities that remain — `bermuda` under "energy", via `bluetooth-low-energy` — are
+word ambiguity, which no amount of labelling fixes.
+
+Multi-word queries were a single substring, so "skoda connect" only matched a repository
+with that exact sequence somewhere. The query is now split on whitespace and every term has
+to match the row, in any field, in any order. A term that matches nothing on its own is
+dropped rather than emptying the result: "solar wechselrichter" answers with the 137 rows
+for "solar" and the footer says `„wechselrichter" ignoriert — kein Treffer`. If no term
+survives, none is dropped — the query is simply wrong and the empty state should say so.
+
+The worry about filler words turned out to be misplaced, and the measurement is the reason
+to stop worrying: a keystroke costs 10-25ms including the repaint, and it costs the same
+for "a" with 4,192 answers as for "skoda connect" with one. It is one pass over prepared
+strings; the number of hits does not enter into it, and the table recycles its rows.
+
+The suggestion dropdown was deliberately left alone. It shows eight entries ranked by
+stars, matching names, slugs and domains — "I know which repository I want". Feeding topics
+into it would let "energy", with 358 topic matches, push the exact name matches out of the
+eight slots. The dropdown stays precise; the table is where breadth belongs.

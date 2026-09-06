@@ -273,6 +273,10 @@ def build_payload(session, today: date | None = None) -> dict:
             "active": thresholds.active,
             "quiet": thresholds.quiet,
             "stale": thresholds.stale,
+            # The page prints this cut-off in the growth view's caption. It used to be
+            # written out a second time in app.js, where it could drift away from the
+            # value the figures were actually computed with.
+            "min_pct_base": MIN_PCT_BASE,
         },
         "enriched": bool(gh),
         "adoption_domains": len(versions_today),

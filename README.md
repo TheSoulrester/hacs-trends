@@ -128,11 +128,26 @@ environment, collects the data and serves the page on <http://localhost:8000>. I
 Individual steps, if you want them:
 
 ```bash
+./run.sh check      # syntax, translations, workflows, tests - seconds, no token
+./run.sh build      # everything the scheduled run does, ~12 min, needs a token
 ./run.sh sync       # HACS data and Home Assistant analytics
+./run.sh dates      # acceptance dates from the git history of hacs/default
+./run.sh enrich     # releases, commits, archived state (needs a token)
 ./run.sh export     # build web/data.json
 ./run.sh stats      # what is in the database
 ./run.sh test       # the collector's test suite
 ```
+
+`check` is worth running before every push. It catches what typing breaks — invalid
+JavaScript, a translation key that exists in one file and not the other, a placeholder
+that no longer matches, a workflow that is no longer valid YAML — in a few seconds,
+without a token or a network. What it cannot check is whether the page looks right: serve
+`web/` and look at it.
+
+`build` is the one to use before looking at local data. An `export` on its own writes
+whatever the database currently holds, and a database that has never been enriched leaves
+every release and commit column empty — the file is then *worse* than the published one,
+not newer.
 
 The enrichment and the star history need a GitHub token — a **classic personal access
 token with no scopes ticked at all**. Everything read is public; the token only lifts

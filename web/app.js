@@ -54,6 +54,30 @@ function rel(iso) {
   return t("unit.months", { n: n(Math.round(d / 30.44)) });
 }
 function ago(iso) { var v = rel(iso); return v ? t("unit.ago", { v: v }) : ""; }
+/* The table's own units are clipped for a column - "3 T" reads fine next to a figure
+   and badly as a sentence in the rail. Intl carries the long forms for every locale we
+   offer, so the run stamp asks the platform rather than the translation files. */
+function agoLong(iso) {
+  var ms = Date.now() - Date.parse(iso);
+  if (!isFinite(ms)) return "";
+  if (ms < 0) ms = 0;
+  var f;
+  try { f = new Intl.RelativeTimeFormat(LOCALE, { numeric: "always" }); }
+  catch (e) { return ago(iso); }
+  var min = Math.round(ms / 60000);
+  if (min < 60) return f.format(-min, "minute");
+  var h = Math.round(min / 60);
+  if (h < 24) return f.format(-h, "hour");
+  var d = Math.round(h / 24);
+  if (d < 31) return f.format(-d, "day");
+  return f.format(-Math.round(d / 30.44), "month");
+}
+function stamp(iso) {
+  try {
+    return new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" })
+      .format(new Date(iso));
+  } catch (e) { return iso; }
+}
 
 var ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ESC[c]; }); }
@@ -156,6 +180,13 @@ var viewport, spacer, pool = [], maxInstall = 1;
 /* The ranked list depends on the view, the window and the sort - not on what is typed
    into the search box. Re-sorting 4,193 rows on every keystroke was work thrown away. */
 var baseList = null, baseKey = "", renderGen = 0;
+/* Terms the user typed that match nothing on their own. Dropping them beats returning
+   an empty table for "solar wechselrichter" when "solar" has 137 answers - but a search
+   that silently ignores half of what was typed is worse than no search, so the footer
+   names them. */
+var dropped = [];
+/* More than this and the per-term passes start to cost something. Nobody types six. */
+var MAX_TERMS = 6;
 /* Lowercasing 4,193 descriptions on every keystroke costs 79 ms, measured. The same
    search against a prepared haystack costs 3.5 ms; building it costs 213 ms once, in
    idle time after the first paint. Until it exists, the old path answers - a search
@@ -167,6 +198,13 @@ function buildIndex() {
     var slug = r.n.toLowerCase();
     r._k = (r.n + " " + (r.t || "") + " " + (r.dom || "")).toLowerCase();
     r._d = (r.d || "").toLowerCase();
+    /* GitHub topics are in the payload already and were never searched. They mostly
+       close a spelling gap: a description says "heat pump", the topic says "heatpump",
+       and a search for one missed the other. Measured: +136 kB of haystack, and 10 of
+       the 24 answers to "heatpump" only reachable this way. They stay out of the
+       suggestion list, where 358 topic matches for "energy" would push the exact name
+       matches out of the eight slots. */
+    r._t = (r.tp || []).join(" ").toLowerCase();
     /* The suggestion list needs the fields separately, to tell a name that STARTS with
        the query from one that merely contains it. Lowercasing them here rather than on
        every keystroke: the same 4,193-row mistake the search itself used to make. */
@@ -177,12 +215,32 @@ function buildIndex() {
   }
   INDEXED = true;
 }
-function hit(r, q) {
-  if (INDEXED) return r._k.indexOf(q) >= 0 || r._d.indexOf(q) >= 0;
+function termHit(r, q) {
+  if (INDEXED) return r._k.indexOf(q) >= 0 || r._d.indexOf(q) >= 0 || r._t.indexOf(q) >= 0;
   return (r.n && r.n.toLowerCase().indexOf(q) >= 0) ||
          (r.t && r.t.toLowerCase().indexOf(q) >= 0) ||
          (r.d && r.d.toLowerCase().indexOf(q) >= 0) ||
-         (r.dom && r.dom.toLowerCase().indexOf(q) >= 0);
+         (r.dom && r.dom.toLowerCase().indexOf(q) >= 0) ||
+         (r.tp && r.tp.join(" ").toLowerCase().indexOf(q) >= 0);
+}
+/* Every term has to match, but not next to each other: "skoda connect" is two
+   conditions on one row, not one string to find. */
+function hit(r, terms) {
+  for (var i = 0; i < terms.length; i++) if (!termHit(r, terms[i])) return false;
+  return true;
+}
+/* Which of the terms match anything at all, in one pass rather than one pass each.
+   Stops as soon as every term has been accounted for, which for a normal query is
+   within the first handful of rows. */
+function liveTerms(rows, terms) {
+  var seen = [], left = terms.length, i, k;
+  for (k = 0; k < terms.length; k++) seen[k] = false;
+  for (i = 0; i < rows.length && left; i++) {
+    for (k = 0; k < terms.length; k++) {
+      if (!seen[k] && termHit(rows[i], terms[k])) { seen[k] = true; left--; }
+    }
+  }
+  return seen;
 }
 function $(id) { return document.getElementById(id); }
 
@@ -252,10 +310,19 @@ function apply() {
   }
 
   var q = query.trim().toLowerCase();
-  VIEW = (q || cat || rhythm) ? base.filter(function (r) {
+  var terms = q ? q.split(/\s+/).slice(0, MAX_TERMS) : [];
+  dropped = [];
+  if (terms.length > 1) {
+    var seen = liveTerms(base, terms), kept = [], k;
+    for (k = 0; k < terms.length; k++) (seen[k] ? kept : dropped).push(terms[k]);
+    /* If nothing survives, the query is simply wrong and the empty state should say so.
+       Dropping every term would answer a search nobody made. */
+    if (kept.length) terms = kept; else dropped = [];
+  }
+  VIEW = (terms.length || cat || rhythm) ? base.filter(function (r) {
     if (cat && r.c !== cat) return false;
     if (rhythm && r.rh !== rhythm) return false;
-    if (q && !hit(r, q)) return false;
+    if (terms.length && !hit(r, terms)) return false;
     return true;
   }) : base;
   maxInstall = VIEW.reduce(function (m, r) { return Math.max(m, r.inst || 0); }, 1);
@@ -559,15 +626,37 @@ function buildWindows() {
   });
 }
 
+/* The brand block and the head bar share one horizontal border, and CSS cannot tell one
+   the other's height. A fixed value holds while the head stays on one line; between 900
+   and roughly 1240px it wraps the search box onto a second row and the seam broke by up
+   to 48px. So the head is measured at its natural height - the custom property is
+   cleared first, which leaves the stylesheet floor of 92px in place - and the brand is
+   told to match. Idempotent: the value written back is the height already reached. */
+function syncTopbar() {
+  var root = document.documentElement;
+  root.style.removeProperty("--topbar");
+  if (innerWidth <= 900) return;
+  /* Either side can be the taller one: the head bar wraps its search box on a narrow
+     window, and the brand block grows a line when the run stamp wraps or the stale
+     warning appears. Whichever is taller sets the height for both. */
+  var h = Math.max($("head-bar").getBoundingClientRect().height,
+                   document.querySelector(".brand").getBoundingClientRect().height);
+  root.style.setProperty("--topbar", Math.ceil(h) + "px");
+}
 function renderHead() {
   var m = DATA.meta;
   $("view-title").textContent = t("view." + view + ".title");
   var note = t("view." + view + ".note", {
     matched: n(m.analytics.matched), withDomain: n(m.analytics.repos_with_domain),
-    minBase: 25, median: m.activity_percentiles.p50, p90: m.activity_percentiles.p90,
+    /* The cut-off lives in export.py. Repeating it here meant two places to change and
+       one of them would have been forgotten. */
+    minBase: n((m.thresholds && m.thresholds.min_pct_base) || 25),
+    median: m.activity_percentiles.p50, p90: m.activity_percentiles.p90,
     installed: t("view.installed.title")
   });
   $("view-note").innerHTML = esc(note).replace(/&lt;b&gt;/g, "<b>").replace(/&lt;\/b&gt;/g, "</b>");
+  /* The note is the tallest thing in the bar and changes with the view. */
+  syncTopbar();
 }
 
 /* Four figures that change with the view - the point of a console strip is that it
@@ -701,7 +790,10 @@ function renderFoot() {
     '<span class="hl">' + n(VIEW.length) + " / " + n(ROWS.length) + "</span>" +
     "<span>" + esc(t("foot.starCoverage", { n: n(c.with_stars), pct: Math.round(c.with_stars / c.total * 100) })) + "</span>" +
     "<span>" + esc(t("foot.downloadCoverage", { pct: Math.round(c.with_downloads / c.total * 100) })) + "</span>" +
-    "<span>" + esc(t("foot.installsSample")) + "</span>";
+    "<span>" + esc(t("foot.installsSample")) + "</span>" +
+    (dropped.length ? '<span class="hl">' +
+      esc(t("foot.dropped", { terms: dropped.map(function (x) { return '\u201e' + x + '\u201c'; }).join(", ") })) +
+      "</span>" : "");
 }
 
 function paint() {
@@ -713,9 +805,21 @@ function paint() {
   });
   $("q").placeholder = t("filter.searchPlaceholder");
   $("disclose").textContent = t("mobile.info");
-  $("brand-sub").textContent = t("app.repoStamp", {
-    n: n(DATA.meta.counts.repos), date: dt(DATA.meta.day)
-  });
+  var meta = DATA.meta;
+  $("brand-sub").textContent = t("app.repoStamp", { n: n(meta.counts.repos) });
+  /* How old the page is, against the reader's clock rather than a date they have to
+     subtract from today. If the collector stops, nothing is deployed and this stamp
+     ages in place - which is the honest outcome. */
+  var run = $("brand-run");
+  run.textContent = meta.generated_at ? t("app.runStamp", { ago: agoLong(meta.generated_at) }) : "";
+  run.title = meta.generated_at ? stamp(meta.generated_at) : "";
+  /* The one case the run stamp cannot cover: the workflow finished, but the newest
+     snapshot in the database is older than the run. Then the page is fresh and the data
+     is not, and only saying so keeps the stamp above from lying. */
+  var stale = $("brand-stale");
+  var runDay = meta.generated_at ? meta.generated_at.slice(0, 10) : meta.day;
+  stale.hidden = !meta.day || meta.day === runDay;
+  stale.textContent = stale.hidden ? "" : t("app.dataDay", { date: dt(meta.day) });
   buildNav(); buildWindows(); buildHead(); buildFilters(); renderHead(); apply();
 }
 
@@ -735,7 +839,7 @@ function boot(data) {
   /* The narrow layout scrolls the page, not the viewport element. */
   addEventListener("scroll", function () { if (innerWidth <= 900) render(); }, { passive: true });
   addEventListener("resize", function () {
-    pool = []; spacer.innerHTML = ""; renderGen++; buildHead(); render();
+    pool = []; spacer.innerHTML = ""; renderGen++; buildHead(); render(); syncTopbar();
   });
   /* Error events do not bubble, but they do capture. One listener, no inline handler,
      and a domain that 404s is asked for exactly once. */
