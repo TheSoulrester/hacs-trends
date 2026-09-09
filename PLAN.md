@@ -910,16 +910,57 @@ the reader has asked for that level of detail.
 add-ons, which is a different thing from what HACS distributes. Custom integrations and
 dashboard cards, then, however much longer it reads.
 
-**The local instructions were wrong for the person most likely to follow them.** `./run.sh`
-with no argument runs sync, export and serve — no `enrich`. It therefore overwrites the
-committed `web/data.json` with a version whose release and commit columns are empty, and
-the local page ends up *worse* than the published one. For someone who only wants to see
-it running, the answer is `python3 -m http.server -d web 8000` against the data already in
-the repository: no dependencies, no virtual environment, no token, no twelve minutes. That
-is now the first instruction, with `./run.sh` and its overwrite named plainly underneath.
+**A wrong claim shipped in the first version of this rewrite, and is recorded here rather
+than quietly fixed.** Reasoning from `run.sh` alone — it runs sync, export and serve with
+no `enrich` — the section was rebuilt around a supposedly better first command:
+`python3 -m http.server -d web 8000` against "the data already in the repository". There is
+no data in the repository. `web/data.json` is in `.gitignore`: about 2 MB, rebuilt on every
+run, produced by the workflow and deployed straight to Pages. A fresh clone served that way
+is a page with nothing in it. The lesson is the ordinary one for this project — the claim
+was derived from one file instead of checked against the repository, and `git ls-files web/`
+would have settled it in a second.
+
+What the section says now is what actually happens. `./run.sh` is the first and only
+command, and it works without a key: stars and their trends over every period,
+installations, version adoption, categories, last commit and status. The trends work
+immediately because `data/stars/star_days.jsonl.gz` *is* committed. What stays empty is
+what has to come from GitHub itself — releases, rhythm, commit counts, archived state —
+because anonymous callers get 60 requests an hour against 4,193 repositories. The token
+section explains the rest.
 
 No screenshot yet, though the page is the kind of thing that wants one. It cannot be
 rendered from this environment: the egress blocks `brands.home-assistant.io` and
 `fonts.googleapis.com`, so an automated capture loses every integration logo and both
 webfonts. It has to be taken by hand from the live page and dropped in as
 `docs/screenshot.png`, with the image line put back under the opening sentence.
+
+### 13.9 The screenshot, and a number that moves
+
+The screenshot was nearly handed back to Alex as a manual job on the grounds that this
+environment cannot render one: `brands.home-assistant.io` and `fonts.googleapis.com` are
+both refused by the egress proxy, so a capture loses every integration logo and both
+webfonts. That was true and the wrong conclusion. What the proxy does allow is
+`raw.githubusercontent.com` and the npm registry, and both fonts and all the logos live
+behind those:
+
+- Public Sans and JetBrains Mono from the `@fontsource` packages on npm.
+- The logos from `home-assistant/brands` over raw.githubusercontent, one request per
+  domain — 5 of the 11 domains in the top rows have one, which is what the live page shows
+  too, the rest falling back to the category mark exactly as they do in the browser.
+- The data from the published page itself, which is reachable, so the capture shows the
+  real figures rather than a four-day-old local file.
+
+A local copy of `index.html` and `app.js` was patched to point at the local fonts and
+logos; nothing in the repository was touched. Palette-quantised the file is 183 KB rather
+than 491 KB, with no visible difference on a flat dark interface.
+
+That capture also settled the open item from §13.1: the published `data.json` now carries
+`meta.thresholds.min_pct_base: 25`, so the growth caption reads its cut-off from the same
+place the figures are computed with.
+
+And it caught something else. The store had 4,193 repositories when this was written and
+4,194 by the time the screenshot was taken. The README stated 4,193 as a fact in running
+prose, which would have been wrong within a week and wrong forever after. Prose now says
+"more than four thousand", and the exact counts survive only inside measurement statements,
+where they are dated by their wording ("when it was measured"). A figure in a README that
+nothing keeps up to date is a claim with an expiry date on it.

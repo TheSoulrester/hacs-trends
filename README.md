@@ -8,19 +8,21 @@
 **Which Home Assistant custom integrations are alive — and which have quietly been
 abandoned.**
 
+![The dashboard, ranking the repositories that gained the most stars in the last 30 days](docs/screenshot.png)
+
 ## What this is
 
 [HACS](https://hacs.xyz) is where Home Assistant users find the community-made
 extras: integrations for devices Home Assistant does not support out of the box,
-dashboard cards, themes. There are over four thousand of them, nearly all written by
-volunteers in their spare time.
+dashboard cards, themes. There are more than four thousand of them, and the number
+grows most weeks. Nearly all are written by volunteers in their spare time.
 
 The store gives you a list and a search box. What it cannot tell you is which of those
 projects still has somebody looking after it. Some are polished and updated weekly.
 Some have not been touched since 2021 and will break the next time Home Assistant
 changes something. From the store page, both look the same.
 
-This page watches all 4,193 of them and asks the same few questions twice a day: is
+This page watches every one of them and asks the same few questions twice a day: is
 anyone starring it, is anyone actually running it, has the code been touched lately,
 do releases still come out. Then it ranks them by the answers.
 
@@ -97,34 +99,33 @@ This is the part that matters most, so it is on the page itself as well as here.
 
 ## Try it on your own machine
 
-**Just to look at it**, you need nothing but a browser, `git`, and any Python:
+You need `git` and Python 3.10 or newer. Nothing else — no account, no key, no admin
+rights, and nothing gets installed system-wide.
 
 ```bash
 git clone https://github.com/thesoulrester/hacs-trends.git
 cd hacs-trends
-python3 -m http.server -d web 8000
-```
-
-Then open <http://localhost:8000>. That is the complete page with the real, current
-data — the numbers are committed to the repository, so there is nothing to fetch, no
-account, no key, no waiting. Stop it with Ctrl-C.
-
-**To collect the data yourself** you need Python 3.10 or newer, and then:
-
-```bash
 ./run.sh
 ```
 
-The script sorts itself out: it finds a suitable Python, sets up its own isolated
-environment, installs what it needs, fetches the HACS store and the Home Assistant
-statistics, and serves the result on <http://localhost:8000>. No admin rights, and
-nothing is installed system-wide.
+The script sorts itself out from there: it finds a suitable Python, sets up its own
+isolated environment, installs what it needs, fetches the HACS store and the Home
+Assistant statistics, and serves the page on <http://localhost:8000>. A couple of
+minutes the first time, faster afterwards. Stop it with Ctrl-C.
 
-One thing to know before you run it: this collects the parts that need no permission
-from GitHub, which leaves the release and commit columns empty — and it overwrites the
-data file that came with the repository. If you just wanted to see the page, the plain
-web server above is the better command. To collect *everything*, see the developer
-section below.
+What you get without a GitHub key is most of the page: stars and their trends over every
+period, installations, version adoption, categories, last commit and maintenance status.
+The full star history is committed to this repository, which is why the trends work
+straight away rather than needing weeks of collecting.
+
+What stays empty are the columns that come from GitHub itself — releases per year,
+release rhythm, commit counts, archived state — because GitHub allows anonymous callers
+only 60 requests an hour, and there are over four thousand repositories to ask about.
+Filling those in
+takes a key, which is free and takes a minute to create; see below.
+
+There is no shortcut that skips the collecting: the finished data file the page reads is
+about 2 MB and is rebuilt on every run, so it is not stored in the repository.
 
 <details>
 <summary><b>Collecting everything, and the other commands</b></summary>
@@ -205,13 +206,13 @@ given to either. That happens for 43 of them.
 | **Installation growth** | Differenced from this project's own daily slices — analytics publishes today's figure, never a history, so this column can only fill in over time and says so on the page. |
 | **Version adoption** | The share of reported installations running the release tag HACS names as newest. If that exact tag does not appear in the analytics data the column shows a dash, not a zero — an early version of this got 0.0 % for everything by picking the highest-looking key instead, which selected nightly builds with one install. |
 | **Last commit** | The HACS dataset's `last_updated`. A 45-repository sample against the GitHub API showed this is exactly GitHub's `pushed_at`, not `updated_at` — the wording on the page follows that measurement. Shown as the distance from your own clock, so it stays right between collection runs. |
-| **Status** (active / quiet / stale / dormant) | Days since that commit: under 90 active, under 365 quiet, under 730 stale, beyond that dormant. Archived repositories and ones GitHub no longer serves get their own state. The thresholds come from the measured distribution across all 4,193 repositories — median 55 days, P75 208, P90 689. |
+| **Status** (active / quiet / stale / dormant) | Days since that commit: under 90 active, under 365 quiet, under 730 stale, beyond that dormant. Archived repositories and ones GitHub no longer serves get their own state. The thresholds come from the measured distribution across the whole store — when it was measured, median 55 days, P75 208, P90 689. |
 | **Last release** | The newest release from GitHub GraphQL, ordered explicitly by creation date. Without that explicit ordering GitHub returns the *oldest* releases for a `last: N` query, which produced a plausible and entirely wrong table until it was checked. |
 | **Releases / year** | Releases published in the last 365 days. The first pass fetches 30 releases per repository and a second pass re-queries the ones that hit that ceiling with 100, so the number is exact for all but the 52 repositories still at 100 — those are shown as `100+` rather than as a figure the data cannot support. |
 | **Release rhythm** | Buckets on that same count: 12 or more continuous, 4 or more regular, 1 or more occasional, none in the year dormant, and never published a release at all shows as never. The thresholds are the corpus quartiles (median 4 a year, P75 13, P90 27), not round numbers. |
 | **Commits / year and quarter** | GitHub GraphQL, counted on the default branch since a timestamp — not a rate, an actual count. |
 | **Gaining and in use** | The percentile rank of star growth and of installation growth, ranked on the **lower** of the two, so a repository has to be strong in both. Both component ranks get their own column: a placement is never a black box. |
-| **In HACS since** | The first commit that added the repository to the lists in `hacs/default` — exact back to 20 October 2019 and matching 4,171 of 4,193 repositories. The 22 without a date are HACS itself, which is not in its own list, and repositories renamed on GitHub since. Everything stamped with 20 October 2019 is shown as "since the start" rather than dated: that is the day the list was written from an older location, so those were already in HACS and the real date is gone. |
+| **In HACS since** | The first commit that added the repository to the lists in `hacs/default` — exact back to 20 October 2019, and when it was measured it matched 4,171 of 4,193 repositories. The ones without a date are HACS itself, which is not in its own list, and repositories renamed on GitHub since. Everything stamped with 20 October 2019 is shown as "since the start" rather than dated: that is the day the list was written from an older location, so those were already in HACS and the real date is gone. |
 | **New in HACS** | Ranked by that acceptance date. The first daily slice a repository appears in is kept as a fallback for anything the list has not caught up with. |
 | **Downloads** | The release asset counter from the HACS dataset. Only 33 % of repositories have one, because HACS installs from source when a release carries no assets. Shown, never ranked on. |
 | **Rank number** | The position in the current view's full ranking, assigned before your search and filters are applied — so a search result also tells you where it stands. |
