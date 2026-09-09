@@ -866,3 +866,60 @@ The suggestion dropdown was deliberately left alone. It shows eight entries rank
 stars, matching names, slugs and domains — "I know which repository I want". Feeding topics
 into it would let "energy", with 358 topic matches, push the exact name matches out of the
 eight slots. The dropdown stays precise; the table is where breadth belongs.
+
+### 13.7 What the README needed
+
+Two of these changes made the README wrong rather than merely incomplete. "The page footer
+names the day the data was built" described a footer line that no longer exists and a
+figure that is no longer a day; it now describes the rail stamp, the tooltip, and the
+condition under which the second line appears. And the README never said what the search
+covers, which was tolerable while it covered the obvious fields and is not now that a
+query can be several terms and one of them can be silently dropped — so "What the search
+covers" is a section of its own, including why the suggestion dropdown stayed narrow.
+
+Sections 6 and 7 were left as written. They record what was planned in the second draft,
+not what the page does today, and the later sections are where reality is kept. Two things
+noticed there and deliberately not touched: §6 already listed "topic" among the searchable
+fields, which only became true now, and §7 points at a `CONTRIBUTING-TRANSLATIONS.md` that
+has never existed — the process it describes lives in the README's "Translating" section
+instead.
+
+### 13.8 The README, rewritten for the reader who does not write code
+
+The README was thorough and in the wrong order. It was written for someone auditing the
+method: after a short introduction came the caveats, and then ninety lines of "How every
+figure is produced" with two large tables. A Home Assistant user deciding whether the page
+is worth their time met `data-v2.hacs.xyz/<category>/data.json` about a sixth of the way
+down. Nothing in it explained how to *use* the page — that you switch question on the
+left, period at the top, that there is a search and what it looks through — and there was
+no picture of a project whose entire point is visual.
+
+Rewritten by reader rather than by topic: first whoever wants to look, then whoever wants
+to trust the numbers, then whoever wants to build on it. What this is · How to use it ·
+Reading the numbers honestly · Try it on your own machine · Where the numbers come from ·
+the operational sections. Nothing was dropped; the column-by-column table and the
+developer commands moved into collapsed `<details>` blocks, which GitHub renders as a
+single clickable line. Measured at 1012px: 5,531px of scroll before, 4,824px after, and
+that is with a screenshot and two new sections added.
+
+Jargon that was never explained went: opt-in analytics, percentile rank, corpus median,
+P75/P90, GraphQL, manifest domain. They survive inside the collapsed methodology, where
+the reader has asked for that level of detail.
+
+**"Add-ons" was avoided deliberately.** In Home Assistant that word means Supervisor
+add-ons, which is a different thing from what HACS distributes. Custom integrations and
+dashboard cards, then, however much longer it reads.
+
+**The local instructions were wrong for the person most likely to follow them.** `./run.sh`
+with no argument runs sync, export and serve — no `enrich`. It therefore overwrites the
+committed `web/data.json` with a version whose release and commit columns are empty, and
+the local page ends up *worse* than the published one. For someone who only wants to see
+it running, the answer is `python3 -m http.server -d web 8000` against the data already in
+the repository: no dependencies, no virtual environment, no token, no twelve minutes. That
+is now the first instruction, with `./run.sh` and its overwrite named plainly underneath.
+
+No screenshot yet, though the page is the kind of thing that wants one. It cannot be
+rendered from this environment: the egress blocks `brands.home-assistant.io` and
+`fonts.googleapis.com`, so an automated capture loses every integration logo and both
+webfonts. It has to be taken by hand from the live page and dropped in as
+`docs/screenshot.png`, with the image line put back under the opening sentence.
