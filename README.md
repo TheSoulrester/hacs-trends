@@ -202,17 +202,17 @@ given to either. That happens for 43 of them.
 | **Stars** | The HACS dataset's own count, taken at collection time. |
 | **Stars gained (7 d / 30 d / quarter / year)** | Summed from GitHub's star history endpoint, which returns weekly buckets each holding a seven-element array of daily counts, back to the repository's creation. The sum over the window is therefore exact, not interpolated. GitHub reports stars *given*, never stars removed, so this is a gross figure. |
 | **Growth %** | Stars gained divided by the count at the **start** of the window, not the current one. Below 25 stars at the start no percentage is shown at all; with a corpus median of 13 stars, a percentage ranking would otherwise be a list of repositories that went from 2 stars to 4. The cut-off travels in the data file, so the page always states the value the figures were actually computed with. |
-| **Installations** | Home Assistant's opt-in analytics, matched to a repository by the integration domain in its `manifest.json`. Where two repositories claim the same domain the number is flagged as ambiguous rather than attributed to one of them (43 domains, currently). Integrations only — 2,101 of the 3,248 integrations that declare a domain are matched. |
+| **Installations** | Home Assistant's opt-in analytics, matched to a repository by the integration domain in its `manifest.json`. Where two repositories claim the same domain the number is flagged as ambiguous rather than attributed to one of them — the current count is in the page's own stats strip ("Ambiguous domain"), not repeated here where it would go stale. Integrations only, and not every one declares a domain; the match rate ("With install data") is likewise live on the page. |
 | **Installation growth** | Differenced from this project's own daily slices — analytics publishes today's figure, never a history, so this column can only fill in over time and says so on the page. |
 | **Version adoption** | The share of reported installations running the release tag HACS names as newest. If that exact tag does not appear in the analytics data the column shows a dash, not a zero — an early version of this got 0.0 % for everything by picking the highest-looking key instead, which selected nightly builds with one install. |
 | **Last commit** | The HACS dataset's `last_updated`. A 45-repository sample against the GitHub API showed this is exactly GitHub's `pushed_at`, not `updated_at` — the wording on the page follows that measurement. Shown as the distance from your own clock, so it stays right between collection runs. |
 | **Status** (active / quiet / stale / dormant) | Days since that commit: under 90 active, under 365 quiet, under 730 stale, beyond that dormant. Archived repositories and ones GitHub no longer serves get their own state. The thresholds come from the measured distribution across the whole store — when it was measured, median 55 days, P75 208, P90 689. |
 | **Last release** | The newest release from GitHub GraphQL, ordered explicitly by creation date. Without that explicit ordering GitHub returns the *oldest* releases for a `last: N` query, which produced a plausible and entirely wrong table until it was checked. |
-| **Releases / year** | Releases published in the last 365 days. The first pass fetches 30 releases per repository and a second pass re-queries the ones that hit that ceiling with 100, so the number is exact for all but the 52 repositories still at 100 — those are shown as `100+` rather than as a figure the data cannot support. |
+| **Releases / year** | Releases published in the last 365 days. The first pass fetches 30 releases per repository and a second pass re-queries the ones that hit that ceiling with 100, so the number is exact for all but a small minority still at 100 — those are shown as `100+` rather than as a figure the data cannot support. |
 | **Release rhythm** | Buckets on that same count: 12 or more continuous, 4 or more regular, 1 or more occasional, none in the year dormant, and never published a release at all shows as never. The thresholds are the corpus quartiles (median 4 a year, P75 13, P90 27), not round numbers. |
 | **Commits / year and quarter** | GitHub GraphQL, counted on the default branch since a timestamp — not a rate, an actual count. |
 | **Gaining and in use** | The percentile rank of star growth and of installation growth, ranked on the **lower** of the two, so a repository has to be strong in both. Both component ranks get their own column: a placement is never a black box. |
-| **In HACS since** | The first commit that added the repository to the lists in `hacs/default` — exact back to 20 October 2019, and when it was measured it matched 4,171 of 4,193 repositories. The ones without a date are HACS itself, which is not in its own list, and repositories renamed on GitHub since. Everything stamped with 20 October 2019 is shown as "since the start" rather than dated: that is the day the list was written from an older location, so those were already in HACS and the real date is gone. |
+| **In HACS since** | The first commit that added the repository to the lists in `hacs/default` — exact back to 20 October 2019, and matched for nearly every repository. The ones without a date are HACS itself, which is not in its own list, and repositories renamed on GitHub since. Everything stamped with 20 October 2019 is shown as "since the start" rather than dated: that is the day the list was written from an older location, so those were already in HACS and the real date is gone. |
 | **New in HACS** | Ranked by that acceptance date. The first daily slice a repository appears in is kept as a fallback for anything the list has not caught up with. |
 | **Downloads** | The release asset counter from the HACS dataset. Only 33 % of repositories have one, because HACS installs from source when a release carries no assets. Shown, never ranked on. |
 | **Rank number** | The position in the current view's full ranking, assigned before your search and filters are applied — so a search result also tells you where it stands. |
@@ -240,12 +240,15 @@ pay for or look after.
 
 - **Twice a day** — fetch the HACS store and the Home Assistant statistics, ask GitHub
   about releases and commits, write the day's figures, rebuild the page and publish it.
-- **Once a week** — re-read the full star history for every repository. This is the slow
-  one: about 8,400 requests and up to two hours.
+  As part of this run, GitHub is also asked which repositories' star counts moved since
+  the day before — a small fraction of the store, not all of it — and only those get a
+  fresh star history request.
+- **Once a week** — re-read the full star history for every repository from scratch.
+  This is the slow one, and mainly a self-healing fallback: about 8,400 requests and up
+  to two hours.
 
-Because the star history is only refreshed weekly, a repository starred yesterday may be
-up to seven days behind in the star columns, while everything else is at most twelve
-hours old.
+Star counts are therefore at most a day old, same as everything else on the page — not
+up to seven days behind, which was true before the daily top-up existed.
 
 ### Where the history lives
 
@@ -254,7 +257,9 @@ as plain text:
 
 - `data/snapshots/YYYY-MM-DD.json.gz` — one slice a day, about 50 KB, roughly 18 MB a
   year. Readable, diffable, and usable by anyone who wants the raw series.
-- `data/stars/star_days.jsonl.gz` — the star history, refreshed weekly.
+- `data/stars/star_days.jsonl.gz` — the full star history, rebuilt from scratch weekly.
+- `data/stars/daily/YYYY-MM-DD.jsonl.gz` — the daily top-up, one small file per day that
+  had repositories move, replayed on top of the weekly bootstrap on every run.
 
 A committed database file would have added its full size to the repository's history on
 every single run.
