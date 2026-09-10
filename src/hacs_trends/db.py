@@ -97,6 +97,12 @@ class RepoGithub(Base):
     commits_year: Mapped[int | None] = mapped_column(Integer)
     commits_quarter: Mapped[int | None] = mapped_column(Integer)
 
+    # GitHub's own current star count. Not displayed - the page shows HACS' figure, per
+    # r.stars on Repo/Snapshot, sourced independently. This exists only to tell the
+    # daily star refresh which repositories moved since yesterday without re-reading
+    # every one of them; see star_history.py.
+    stars_live: Mapped[int | None] = mapped_column(Integer)
+
     unavailable: Mapped[str | None] = mapped_column(String(64), index=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

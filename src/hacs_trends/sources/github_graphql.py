@@ -51,6 +51,7 @@ fragment repoFields on Repository {
   isDisabled
   forkCount
   homepageUrl
+  stargazerCount
   watchers { totalCount }
   primaryLanguage { name }
   licenseInfo { key }
@@ -97,6 +98,11 @@ class GithubRepo:
     closed_issues: int | None = None
     primary_language: str | None = None
     homepage: str | None = None
+    # GitHub's own current star count, fetched alongside everything else at zero extra
+    # cost (measured: cost=1 per query with or without this field, BATCH=50). Not shown
+    # anywhere - it exists only so the daily star refresh can tell which repositories
+    # moved without re-fetching the other 4,000+ that did not. See star_history.py.
+    stars_live: int | None = None
     unavailable: str | None = None
 
 
@@ -160,7 +166,23 @@ def _post(client: httpx.Client, query: str) -> dict:
         if resp.status_code != 200:
             raise SourceError(f"GraphQL returned HTTP {resp.status_code}: {resp.text[:200]}")
 
-        body = resp.json()
+        try:
+            body = resp.json()
+        except ValueError:
+            # Seen in production (9 Sep 2026, run #14): GitHub answered 200 with an
+            # empty body - no status code to branch on, but the same kind of transient
+            # failure as a 502, and it crashed the whole process because nothing here
+            # caught it. Retried the same way a 502 is; if it never recovers, raising
+            # SourceError hands it to the batch-halving fallback below, exactly like a
+            # 504 on a huge repository - not a new failure mode, just an uncaught one.
+            if attempt == MAX_RETRIES - 1:
+                raise SourceError(
+                    f"GraphQL answered HTTP 200 with an unparseable body: {resp.text[:200]!r}"
+                )
+            log.warning("HTTP 200 but the body was not JSON (%r...), retrying", resp.text[:60])
+            time.sleep(delay)
+            delay *= 2
+            continue
         if body.get("data") is None and body.get("errors"):
             msg = body["errors"][0].get("message", "")
             if "rate limit" in msg.lower():
@@ -212,6 +234,7 @@ def _parse(node: dict, repo_id: int, full_name: str, now: datetime,
         is_disabled=node.get("isDisabled"),
         license_key=lic.get("key"),
         fork_count=node.get("forkCount"),
+        stars_live=node.get("stargazerCount"),
         watchers=(node.get("watchers") or {}).get("totalCount"),
         open_issues_gh=(node.get("openIssues") or {}).get("totalCount"),
         closed_issues=(node.get("closedIssues") or {}).get("totalCount"),

@@ -99,13 +99,18 @@ def _load_done(progress_path: Path) -> set[int]:
 
 class StarBootstrap:
     def __init__(self, token: str, out_dir: Path, *, delay: float = 0.0,
-                 weeks: int = DEFAULT_WEEKS):
+                 weeks: int = DEFAULT_WEEKS, per_page: int = PER_PAGE):
         self.out_dir = out_dir
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.progress_path = out_dir / "progress.jsonl"
         self.events_path = out_dir / "star_days.jsonl"
         self.delay = delay
         self.weeks = weeks
+        # The one-time bootstrap wants the widest page (30 weeks) to cover a year in
+        # two requests. A daily top-up only needs to see since yesterday, so it asks
+        # for 2 weeks at per_page=2 - one request per repository instead of one or two,
+        # and verified byte-identical to the first two buckets of a per_page=30 answer.
+        self.per_page = per_page
         self.client = httpx.Client(
             base_url=GITHUB_API_BASE,
             timeout=60.0,
@@ -200,7 +205,7 @@ class StarBootstrap:
         for page in range(1, MAX_PAGE + 1):
             if page > 1 and self.delay:
                 time.sleep(self.delay)
-            resp = self._get(path, {"per_page": PER_PAGE, "page": page})
+            resp = self._get(path, {"per_page": self.per_page, "page": page})
             if resp is None:
                 if page == 1:
                     return {"id": repo_id, "full_name": full_name, "unavailable": True}
@@ -237,7 +242,7 @@ class StarBootstrap:
                 weeks_seen += 1
 
             # Buckets come newest first, so once we have enough weeks we can stop.
-            if weeks_seen >= want or len(batch) < PER_PAGE:
+            if weeks_seen >= want or len(batch) < self.per_page:
                 break
 
         total = sum(counts.values())

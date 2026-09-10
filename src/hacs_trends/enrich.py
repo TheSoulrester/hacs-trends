@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 # Columns written back; kept in one place so the insert and the conflict-update
 # can never drift apart.
-FIELDS = ('name_with_owner', 'created_at', 'pushed_at', 'released_at', 'latest_tag', 'releases_total', 'releases_year', 'releases_quarter', 'releases_year_capped', 'uses_prerelease', 'commits_year', 'commits_quarter', 'is_archived', 'is_fork', 'is_disabled', 'license_key', 'fork_count', 'watchers', 'open_issues_gh', 'closed_issues', 'primary_language', 'homepage', 'unavailable')
+FIELDS = ('name_with_owner', 'created_at', 'pushed_at', 'released_at', 'latest_tag', 'releases_total', 'releases_year', 'releases_quarter', 'releases_year_capped', 'uses_prerelease', 'commits_year', 'commits_quarter', 'is_archived', 'is_fork', 'is_disabled', 'license_key', 'fork_count', 'watchers', 'open_issues_gh', 'closed_issues', 'primary_language', 'homepage', 'stars_live', 'unavailable')
 
 
 def run_enrich(config: Config, *, limit: int | None = None, batch_size: int = 50,

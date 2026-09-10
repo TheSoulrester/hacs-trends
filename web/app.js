@@ -28,6 +28,37 @@ function pickLocale() {
   var nav = (navigator.language || "en").slice(0, 2);
   return codes.indexOf(nav) >= 0 ? nav : "en";
 }
+/* ---------------------------------------------------------------- theme ---
+ * Three states, not two. "System" is the default and stores nothing - that is what
+ * keeps the page following the visitor's setting when it changes while the tab is
+ * open, without a matchMedia listener: no attribute means the media query in the
+ * stylesheet decides, every time it is re-evaluated. Only an explicit choice writes
+ * the attribute, and the script in <head> writes the same one before the first paint
+ * so nothing flashes. */
+var THEMES = ["system", "light", "dark"];
+var THEME_ICON = {
+  system: '<rect x="2.6" y="4.2" width="18.8" height="13" rx="2"/><path d="M8.5 20.5h7"/>',
+  light: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.2 4.2l1.9 1.9' +
+    'M17.9 17.9l1.9 1.9M2.5 12h2.6M18.9 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9"/>',
+  dark: '<path d="M20 14.2A8.4 8.4 0 019.8 4 8.4 8.4 0 1020 14.2z"/>'
+};
+function readTheme() {
+  try {
+    var v = localStorage.getItem("theme");
+    if (v === "light" || v === "dark") return v;
+  } catch (e) {}
+  return "system";
+}
+function applyTheme(mode) {
+  var root = document.documentElement;
+  if (mode === "system") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", mode);
+  try {
+    if (mode === "system") localStorage.removeItem("theme");
+    else localStorage.setItem("theme", mode);
+  } catch (e) {}
+}
+
 var NF, DF;
 function n(v) { return v === undefined || v === null ? null : NF.format(v); }
 function dt(iso) { return iso ? DF.format(new Date(iso + "T00:00:00")) : ""; }
@@ -115,6 +146,12 @@ function iconHtml(r) {
 var FRESH = { cache: "no-cache" };
 
 var WINDOWS = [7, 30, 90, 365];
+/* "Gesamt" ist kein fuenftes Zeitfenster, sondern dessen Abwesenheit: sortiert nach der
+   Gesamtzahl der Sterne, ohne ein d{n}/p{n}-Feld zu befragen, das es fuer "alle Zeit"
+   nicht gibt - die Sterngeschichte deckt hoechstens 60 Wochen ab, "s" dagegen immer.
+   Nur trending bietet es an; Prozent-Wachstum (breakout) und Momentum brauchen zwingend
+   ein Fenster und wuerden bei "all" leer laufen. */
+function windowsFor(v) { return VIEWS[v].allWindow ? WINDOWS.concat(["all"]) : WINDOWS; }
 /* Must match --row in the stylesheet: the renderer positions rows absolutely and cannot
    ask the DOM for a height it has not drawn yet. The phone layout is a card, not a table
    row, and needs the space. */
@@ -123,17 +160,26 @@ function rowH() { return narrow() ? 96 : 56; }
 
 /* ----------------------------------------------------------------- views --- */
 var VIEWS = {
-  trending: { windowed: true, sort: function (w) { return "d" + w; },
-    cols: ["rank", "repo", "cat", "stars", "gained", "growth", "installs", "rhythm", "health"] },
-  installed: { windowed: false, sort: function () { return "inst"; },
+  /* Column order follows one rule everywhere: rank, repo, then the one or two figures
+     that make THIS view what it is, then the same tail every other view uses - type,
+     stars, installs, rhythm/last commit - so a figure that appears in several views
+     always sits in the same place instead of hopping around as you switch tabs. */
+  trending: { windowed: true, allWindow: true,
+    sort: function (w) { return w === "all" ? "s" : "d" + w; },
+    cols: ["rank", "repo", "gained", "growth", "cat", "stars", "installs", "rhythm", "health"] },
+  /* installed has no window row of its own - "installed" is a total, not a period. Its
+     one windowed figure (installsGained) used to silently read whatever window a
+     DIFFERENT view had left behind, with no control here to see or change it. Pinned to
+     30 days instead: always the same number, always what the header says it is. */
+  installed: { windowed: false, fixedWindow: 30, sort: function () { return "inst"; },
     filter: function (r) { return r.inst !== undefined; },
-    cols: ["rank", "repo", "cat", "installs", "adoption", "instGained", "stars", "rhythm", "health"] },
+    cols: ["rank", "repo", "installs", "adoption", "instGained", "cat", "stars", "rhythm", "health"] },
   breakout: { windowed: true, sort: function (w) { return "p" + w; },
     filter: function (r, w) { return r["p" + w] !== undefined; },
-    cols: ["rank", "repo", "cat", "growth", "gained", "stars", "installs", "rhythm", "health"] },
+    cols: ["rank", "repo", "growth", "gained", "cat", "stars", "installs", "rhythm", "health"] },
   momentum: { windowed: true, sort: function () { return "_mom"; }, needsInstallHistory: true,
     filter: function (r, w) { return r._mom !== undefined && r["d" + w] !== undefined; },
-    cols: ["rank", "repo", "cat", "starRank", "instRank", "gained", "installs", "health"] },
+    cols: ["rank", "repo", "starRank", "instRank", "gained", "cat", "installs", "health"] },
   ships: { windowed: false, sort: function () { return "ry"; },
     filter: function (r) { return r.ry !== undefined; },
     /* 52 repositories sit at the 100-release fetch ceiling, so the top of this list is
@@ -143,12 +189,21 @@ var VIEWS = {
       return (a.ra === undefined ? 9999 : a.ra) - (b.ra === undefined ? 9999 : b.ra) ||
              (b.inst || 0) - (a.inst || 0) || (b.s || 0) - (a.s || 0);
     },
-    cols: ["rank", "repo", "cat", "releases", "commits", "released", "adoption", "stars", "installs"] },
+    cols: ["rank", "repo", "releases", "commits", "released", "adoption", "cat", "stars", "installs"] },
   maintenance: { windowed: false, sort: function () { return "age"; },
-    cols: ["rank", "repo", "cat", "health", "released", "rhythm", "stars", "installs"] },
-  fresh: { windowed: false, sort: function () { return "ha"; },
-    cols: ["rank", "repo", "addedAt", "cat", "stars", "gained", "installs", "health"] }
+    cols: ["rank", "repo", "health", "released", "rhythm", "cat", "stars", "installs"] },
+  /* Same fix as installed: "gained" is the one windowed figure in an otherwise
+     unwindowed view, pinned to 30 days for the same reason. */
+  fresh: { windowed: false, fixedWindow: 30, sort: function () { return "ha"; },
+    cols: ["rank", "repo", "addedAt", "gained", "cat", "stars", "installs", "health"] }
 };
+/* The window a column actually reads: the view's own pinned window when it has one,
+   otherwise whatever the (visible, clickable) window row is set to. Nothing here ever
+   reads the bare global win for a view that cannot show or change it. */
+function effectiveWindow() {
+  var fw = VIEWS[view].fixedWindow;
+  return fw !== undefined ? fw : win;
+}
 var ORDER = ["trending", "installed", "breakout", "momentum", "ships", "maintenance", "fresh"];
 
 var COLS = {
@@ -156,10 +211,13 @@ var COLS = {
   repo:      { w: "minmax(230px,3fr)", i18n: "col.repository", sort: "n", str: true },
   cat:       { w: "124px", i18n: "col.category", sort: "c", str: true, cls: "hide-sm" },
   stars:     { w: "84px", i18n: "col.stars", sort: "s", right: true },
-  gained:    { w: "98px", i18n: "col.starsGained", sort: function (w) { return "d" + w; }, right: true, win: true },
-  growth:    { w: "92px", i18n: "col.growth", sort: function (w) { return "p" + w; }, right: true, win: true },
+  /* 118/98/112px: measured so "label + sort arrow" fits on one line at the longest
+     German text (gemessen mit widths2.py) - the header used to wrap to a third line
+     the moment one of these became the active sort column. */
+  gained:    { w: "118px", i18n: "col.starsGained", sort: function (w) { return "d" + w; }, right: true, win: true },
+  growth:    { w: "98px", i18n: "col.growth", sort: function (w) { return "p" + w; }, right: true, win: true },
   installs:  { w: "116px", i18n: "col.installs", sort: "inst", right: true, cls: "hide-sm" },
-  instGained:{ w: "100px", i18n: "col.installsGained", sort: function (w) { return "i" + w; }, right: true, win: true },
+  instGained:{ w: "112px", i18n: "col.installsGained", sort: function (w) { return "i" + w; }, right: true, win: true },
   adoption:  { w: "146px", i18n: "col.adoption", sort: "va", right: true, cls: "hide-md" },
   releases:  { w: "104px", i18n: "col.releases", sort: "ry", right: true },
   commits:   { w: "104px", i18n: "col.commits", sort: "cy", right: true, cls: "hide-md" },
@@ -361,9 +419,9 @@ function cell(c, r, idx) {
         '<span class="desc">' + (r.d ? esc(r.d) : "") + "</span></span></span>";
     case "cat": return '<span class="cat">' + esc(t("cat." + r.c)) + "</span>";
     case "stars": return r.s === undefined ? na() : '<span class="num">' + n(r.s) + "</span>";
-    case "gained": return delta(r["d" + win]);
+    case "gained": return delta(r["d" + effectiveWindow()]);
     case "growth": {
-      var p = r["p" + win];
+      var p = r["p" + effectiveWindow()];
       if (p === undefined) return na();
       return '<span class="delta ' + (p > 0 ? "p" : p < 0 ? "n" : "") + '">' +
         (p > 0 ? "+" : "") + n(Math.round(p * 10) / 10) + "%</span>";
@@ -374,9 +432,11 @@ function cell(c, r, idx) {
       return '<span class="bar num">' + n(r.inst) + '<i style="width:' + w + 'px"></i></span>' +
         (r.amb ? '<span class="amb" title="' + esc(t("hint.ambiguousDomain")) + '">&#9888;</span>' : "");
     }
-    case "instGained":
-      return installWindowOk(win) ? delta(r["i" + win])
-        : na(t("window.unavailableFrom", { date: dt(installFrom(win)) }));
+    case "instGained": {
+      var iw = effectiveWindow();
+      return installWindowOk(iw) ? delta(r["i" + iw])
+        : na(t("window.unavailableFrom", { date: dt(installFrom(iw)) }));
+    }
     case "adoption":
       return r.va === undefined ? na(t("hint.noAdoption"))
         : '<span class="num" title="' + esc(t("hint.adoption", { v: r.v || "?" })) + '">' +
@@ -439,7 +499,10 @@ function bigFor(r) {
       return { v: '<span class="num h-' + r.h + '">' + esc(rel(r.lu) || "-") + "</span>",
         k: t("col.lastCommit") };
     default:
-      return { v: delta(r["d" + win]), k: t("window." + win) };
+      if (win === "all") return { v: r.s === undefined ? na() : '<span class="num">' + n(r.s) + "</span>",
+        k: t("col.stars") };
+      var ew = effectiveWindow();
+      return { v: delta(r["d" + ew]), k: t("window." + ew) };
   }
 }
 
@@ -475,6 +538,7 @@ function cardHtml(r, idx) {
 function visibleCols() {
   return VIEWS[view].cols.filter(function (c) {
     var d = COLS[c];
+    if (d.win && effectiveWindow() === "all") return false;
     if (d.cls === "hide-sm" && innerWidth <= 900) return false;
     if (d.cls === "hide-md" && innerWidth <= 1240) return false;
     return true;
@@ -579,7 +643,7 @@ function buildHead() {
     return '<button data-k="' + key + '" data-str="' + (d.str ? 1 : 0) + '" data-active="' +
       (on ? 1 : 0) + '" class="' + (d.right ? "r" : "") + '"><span>' + esc(t(d.i18n)) +
       (on ? " " + (sortDir < 0 ? "▼" : "▲") : "") + "</span>" +
-      (d.win ? '<span class="sub">' + esc(t("window." + win)) + "</span>" : "") + "</button>";
+      (d.win ? '<span class="sub">' + esc(t("window." + effectiveWindow())) + "</span>" : "") + "</button>";
   }).join("");
   th.querySelectorAll("button[data-k]").forEach(function (b) {
     b.onclick = function () {
@@ -608,19 +672,24 @@ function buildNav() {
 }
 
 function buildWindows() {
-  var box = $("windows"), v = VIEWS[view];
+  var box = $("windows"), v = VIEWS[view], opts = windowsFor(view);
+  /* A view that cannot show "all" must not silently inherit it from the last one that
+     could - fresh has a "gained" column but no window row of its own, so it would keep
+     reading a window that no longer exists on screen. */
+  if (opts.indexOf(win) === -1) win = 30;
   box.hidden = !v.windowed;
   /* Cleared, not merely hidden: a leftover button keeps its click handler, and clicking
      it used to change the period silently while the highlight stayed where it was. */
   box.innerHTML = "";
   if (!v.windowed) return;
-  box.innerHTML = WINDOWS.map(function (w) {
+  box.innerHTML = opts.map(function (w) {
     return '<button data-w="' + w + '" aria-pressed="' + (w === win) + '">' +
       esc(t("window." + w)) + "</button>";
   }).join("");
   box.querySelectorAll("button").forEach(function (b) {
     b.onclick = function () {
-      win = parseInt(b.dataset.w, 10); sortKey = null;
+      win = b.dataset.w === "all" ? "all" : parseInt(b.dataset.w, 10);
+      sortKey = null;
       buildWindows(); buildHead(); renderHead(); apply();
     };
   });
@@ -676,9 +745,15 @@ function corpus(key, fn) {
 function renderStrip() {
   var m = DATA.meta, s = [];
   function sum(key) { return VIEW.reduce(function (a, r) { return a + (r[key] || 0); }, 0); }
-  if (view === "trending" || view === "breakout" || view === "fresh") {
-    s = [["strip.starsGiven", "+" + n(sum("d" + win)), "pos"],
-         ["strip.moving", n(VIEW.filter(function (r) { return r["d" + win]; }).length)],
+  if (view === "trending" && win === "all") {
+    s = [["strip.starsTotal", n(sum("s")), "pos"],
+         ["strip.withStars", n(VIEW.filter(function (r) { return r.s; }).length)],
+         ["strip.dormantYear", n(corpus("dormantYear", function (r) { return (r.age || 0) > 365; })), "warn"],
+         ["strip.withInstalls", n(m.analytics.matched)]];
+  } else if (view === "trending" || view === "breakout" || view === "fresh") {
+    var sw = effectiveWindow();
+    s = [["strip.starsGiven", "+" + n(sum("d" + sw)), "pos"],
+         ["strip.moving", n(VIEW.filter(function (r) { return r["d" + sw]; }).length)],
          ["strip.dormantYear", n(corpus("dormantYear", function (r) { return (r.age || 0) > 365; })), "warn"],
          ["strip.withInstalls", n(m.analytics.matched)]];
   } else if (view === "installed" || view === "momentum") {
@@ -784,6 +859,28 @@ function choose(r) {
   if (innerWidth <= 900) scrollTo(0, 0);
 }
 
+/* Rebuilt with the rest of the interface whenever the language changes, because the
+   labels are the only thing about it that is translated. */
+function buildTheme() {
+  var box = $("theme"), cur = readTheme();
+  box.setAttribute("aria-label", t("theme.label"));
+  box.innerHTML = THEMES.map(function (m) {
+    var label = esc(t("theme." + m));
+    return '<button type="button" data-m="' + m + '" title="' + label + '" aria-label="' + label +
+      '" aria-pressed="' + (m === cur) + '"><svg width="13" height="13" viewBox="0 0 24 24" ' +
+      'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">' +
+      THEME_ICON[m] + "</svg></button>";
+  }).join("");
+  box.querySelectorAll("button").forEach(function (b) {
+    b.onclick = function () {
+      applyTheme(b.dataset.m);
+      box.querySelectorAll("button").forEach(function (o) {
+        o.setAttribute("aria-pressed", o === b ? "true" : "false");
+      });
+    };
+  });
+}
+
 function renderFoot() {
   var c = DATA.meta.coverage;
   $("foot").innerHTML =
@@ -820,7 +917,7 @@ function paint() {
   var runDay = meta.generated_at ? meta.generated_at.slice(0, 10) : meta.day;
   stale.hidden = !meta.day || meta.day === runDay;
   stale.textContent = stale.hidden ? "" : t("app.dataDay", { date: dt(meta.day) });
-  buildNav(); buildWindows(); buildHead(); buildFilters(); renderHead(); apply();
+  buildNav(); buildWindows(); buildHead(); buildFilters(); buildTheme(); renderHead(); apply();
 }
 
 function loadLocale(code) {

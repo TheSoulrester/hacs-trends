@@ -57,6 +57,17 @@ jobs:
           hacs-trends enrich
           hacs-trends refine-releases
 
+      # Star history's daily top-up. GraphQL just fetched every repository's current
+      # star count as part of enrich above (stars_live) at no extra query cost - that
+      # is compared against yesterday's watermark to find who moved, and only those
+      # repositories (roughly 200-300 of ~4,200) get a single lightweight stargazers
+      # request each. Runs on the same automatic token as enrich; the weekly job with
+      # its own token stays as the full from-scratch refresh and self-healing fallback.
+      - name: Star history top-up (repositories that moved since yesterday)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: hacs-trends refresh-stars-daily
+
       - name: Write today's slice and build the page
         id: build
         run: |
@@ -76,7 +87,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshots
+          git add data/snapshots data/stars/daily data/stars/gh_watermark.json.gz
           if git diff --cached --quiet; then
             echo "No new slice."
             exit 0

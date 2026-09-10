@@ -6,22 +6,57 @@
 <title>HACS Trends</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <style>
-/* A console, deliberately single-theme. Dark is the design, not a default that
-   forgot its counterpart - so every colour is painted explicitly and nothing
+/* A console. Dark is the design and stays the base; light is not an inversion of it
+   but a contrast match - every colour was darkened until it reaches the same ratio on
+   white that its counterpart reaches on the dark ground: body text 15.1:1, second level
+   6.7:1, description 3.5:1, separators 1.1:1. The weak values were copied across too,
+   so nothing suddenly reads louder than it did. Measured, not eyeballed. The amber
+   accent cannot survive the move - #e0a955 is 1.9:1 on white and unusable as text - so
+   light gets ochre at 5.0:1. Every colour is painted explicitly in both themes; nothing
    relies on the host's background. */
 :root{
+  color-scheme:dark;
   --bg:#0f1317; --panel:#12171c; --panel-2:#141a20; --raise:#1c242c;
-  --ink:#e6ecf2; --ink-2:#8fa0b0; --ink-3:#5d6f7f; --ink-4:#465666;
-  --line:#1e262e; --line-2:#2a3440;
+  --ink:#e6ecf2; --ink-2:#8fa0b0; --ink-3:#5d6f7f; --ink-4:#465666; --ink-hi:#f3f7fb;
+  --line:#1e262e; --line-2:#2a3440; --rowline:#171e25;
   --accent:#e0a955; --accent-ink:#0f1317;
   --pos:#6fd08c; --neg:#e07070;
   --active:#6fd08c; --quiet:#d3a03e; --stale:#e0824a; --dormant:#e07070; --unknown:#6f7f8d;
+  --plate:#eef2f6; --shadow:0 12px 28px rgba(0,0,0,.45);
   --rail:212px; --row:56px;
   /* The brand block and the head bar meet at one horizontal border. Both used to
      size themselves from their content, so the line broke by 7.7px - and by a
      different amount per language, because the German stamp wraps and the English
      one does not. One height, content centred in it, and the seam holds. */
   --topbar:92px;
+}
+/* The light palette is written out twice on purpose. The first block serves the visitor
+   who never touched the switch and whose system asks for light; the second serves the
+   one who chose it. They cannot be merged into a selector list, because a rule inside a
+   media query is dead whenever the query is false - and both have the same specificity,
+   so the explicit choice wins only by standing later. The dark choice needs no block of
+   its own: :not([data-theme="dark"]) already keeps the system rule off it. */
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    color-scheme:light;
+    --bg:#f4f6f9; --panel:#ffffff; --panel-2:#eef2f6; --raise:#e3e9ef;
+    --ink:#20272d; --ink-2:#4e5e6c; --ink-3:#798c9e; --ink-4:#9ba9b7; --ink-hi:#0b0f13;
+    --line:#e9edef; --line-2:#d2d9df; --rowline:#e4e9ee;
+    --accent:#996411; --accent-ink:#ffffff;
+    --pos:#217f3e; --neg:#c0342c;
+    --active:#217f3e; --quiet:#916817; --stale:#b85013; --dormant:#c0342c; --unknown:#697a8a;
+    --plate:#f0f4f8; --shadow:0 12px 28px rgba(15,23,31,.14);
+  }
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f4f6f9; --panel:#ffffff; --panel-2:#eef2f6; --raise:#e3e9ef;
+  --ink:#20272d; --ink-2:#4e5e6c; --ink-3:#798c9e; --ink-4:#9ba9b7; --ink-hi:#0b0f13;
+  --line:#e9edef; --line-2:#d2d9df; --rowline:#e4e9ee;
+  --accent:#996411; --accent-ink:#ffffff;
+  --pos:#217f3e; --neg:#c0342c;
+  --active:#217f3e; --quiet:#916817; --stale:#b85013; --dormant:#c0342c; --unknown:#697a8a;
+  --plate:#f0f4f8; --shadow:0 12px 28px rgba(15,23,31,.14);
 }
 *{box-sizing:border-box}
 /* The browser's own [hidden]{display:none} loses against any author rule that sets
@@ -55,7 +90,7 @@ button{font:inherit;color:inherit;background:none;border:none}
 .nav button{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:5px;
   color:var(--ink-2);cursor:pointer;text-align:left;width:100%;font-size:13.5px}
 .nav button:hover{color:var(--ink);background:var(--panel-2)}
-.nav button[aria-current="true"]{background:var(--raise);color:#f3f7fb;font-weight:600}
+.nav button[aria-current="true"]{background:var(--raise);color:var(--ink-hi);font-weight:600}
 .nav button[aria-current="true"] svg{color:var(--accent)}
 .nav svg{flex-shrink:0;color:var(--ink-3)}
 .railsec{margin:9px 18px 0;padding-top:13px;border-top:1px solid var(--line)}
@@ -81,19 +116,20 @@ button{font:inherit;color:inherit;background:none;border:none}
 .head h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.012em}
 .head p{margin:0;font-size:12.5px;color:var(--ink-2);max-width:88ch}
 .head p b{color:var(--ink);font-weight:600}
-.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden}
-.seg button{padding:6px 12px;font-family:"JetBrains Mono",monospace;font-size:11px;
+.seg{display:inline-flex;height:32px;border:1px solid var(--line-2);border-radius:6px;overflow:hidden}
+.seg button{height:100%;padding:0 12px;display:flex;align-items:center;
+  font-family:"JetBrains Mono",monospace;font-size:11px;
   letter-spacing:.05em;color:var(--ink-2);cursor:pointer;white-space:nowrap}
 .seg button:hover:not([aria-pressed="true"]){color:var(--ink);background:var(--panel-2)}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
 .search{position:relative}
-.search input{width:210px;padding:7px 11px 7px 30px;border:1px solid var(--line-2);border-radius:6px;
+.search input{width:210px;height:32px;padding:0 11px 0 30px;border:1px solid var(--line-2);border-radius:6px;
   background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px}
 .search input::placeholder{color:var(--ink-4)}
 .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-4)}
 .ac{position:absolute;top:calc(100% + 5px);left:0;width:330px;max-width:76vw;z-index:30;
   background:var(--panel);border:1px solid var(--line-2);border-radius:7px;overflow:hidden;
-  box-shadow:0 12px 28px rgba(0,0,0,.45)}
+  box-shadow:var(--shadow)}
 .ac button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;cursor:pointer;
   text-align:left;border-bottom:1px solid var(--line)}
 .ac button:last-child{border-bottom:0}
@@ -102,8 +138,31 @@ button{font:inherit;color:inherit;background:none;border:none}
 .ac .an{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
 .ac .as{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--ink-4);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:auto}
-.langsel select{background:var(--panel);border:1px solid var(--line-2);color:var(--ink-2);
-  border-radius:6px;padding:6px 8px;font-size:12px;cursor:pointer}
+/* Sprache und Theme sind ein Paar in der Ecke. Die Sprache bleibt bewusst ein select
+   und wird kein Segment: zwei Sprachen passen in eine Leiste, fuenf nicht, und die Liste
+   soll wachsen koennen, ohne die Kopfleiste neu zu bauen. Beide bekommen deshalb
+   denselben Rahmen, dieselbe Rundung, dieselbe Hoehe und dieselbe Schrift, damit sie als
+   eine Gruppe gelesen werden. Der Pfeil ist selbst gezeichnet statt vom System geliehen,
+   weil das Systemdreieck seine Farbe nicht vom Thema nimmt. */
+.corner{display:flex;align-items:center;gap:7px}
+/* Zeitfenster, Suche, Sprache und Theme stehen in einer Reihe und sollen wie ein
+   Satz Bedienelemente wirken, nicht wie vier zufaellig hohe Kaesten. Gemeinsame Hoehe
+   32px, box-sizing:border-box (siehe *{} oben) rechnet Rahmen und Innenabstand hinein. */
+.langsel{position:relative;display:inline-flex}
+.langsel::after{content:"";position:absolute;right:9px;top:50%;margin-top:-2px;
+  pointer-events:none;width:0;height:0;border:4px solid transparent;border-top-color:var(--ink-3)}
+.langsel select,.themesel{height:32px;border:1px solid var(--line-2);border-radius:6px;
+  background:var(--panel)}
+.langsel select{appearance:none;-webkit-appearance:none;color:var(--ink-2);cursor:pointer;
+  font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.05em;
+  padding:0 25px 0 10px;line-height:30px}
+.langsel select:hover{color:var(--ink)}
+.themesel{display:inline-flex;overflow:hidden}
+.themesel button{display:flex;align-items:center;justify-content:center;width:32px;
+  color:var(--ink-3);cursor:pointer}
+.themesel button:hover:not([aria-pressed="true"]){color:var(--ink);background:var(--panel-2)}
+.themesel button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.themesel svg{display:block}
 
 /* One line standing in for the explanation and the summary figures - phone only.
    Without this rule it is a plain <button>, so boot()'s hidden=false put it on the
@@ -119,9 +178,14 @@ button{font:inherit;color:inherit;background:none;border:none}
 .stat .v{font-family:"JetBrains Mono",monospace;font-size:20px;font-weight:700;line-height:1.2}
 
 /* table */
+/* Fixed, not min-height: every view gets the same two-line slot, whether or not its
+   columns use the second line. The alternative - shrinking to fit - is what made the
+   header jump between 38, 42 and 56px as you switched tabs, because how many columns
+   carry a window sub-label differs per view. One constant height beats seven different
+   ones that happen to be "as small as possible". */
 .thead{display:grid;padding:0 26px;font-family:"JetBrains Mono",monospace;font-size:9px;
   letter-spacing:.12em;color:var(--ink-4);border-bottom:1px solid var(--line);
-  background:var(--panel);align-items:stretch;min-height:38px}
+  background:var(--panel);align-items:stretch;height:56px}
 .thead button{display:flex;flex-direction:column;justify-content:center;gap:1px;
   padding:7px 11px;cursor:pointer;overflow:hidden;height:100%;align-items:flex-start;
   font-family:inherit;font-size:inherit;letter-spacing:inherit;color:inherit;text-align:left}
@@ -132,7 +196,7 @@ button{font:inherit;color:inherit;background:none;border:none}
 .viewport{flex:1;overflow-y:auto;overflow-x:hidden;position:relative}
 .spacer{position:relative;width:100%}
 .row{display:grid;position:absolute;left:0;right:0;height:var(--row);align-items:center;
-  padding:0 26px;border-bottom:1px solid #171e25}
+  padding:0 26px;border-bottom:1px solid var(--rowline)}
 .row:hover{background:var(--panel-2)}
 .cell{padding:0 11px;overflow:hidden;min-width:0}
 .cell.r{text-align:right}
@@ -163,7 +227,7 @@ button{font:inherit;color:inherit;background:none;border:none}
    broken image repeated two thousand times. Logos are drawn for light backgrounds,
    hence the light plate under them. */
 .ic{width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-  border-radius:6px;background:#eef2f6;padding:2px;overflow:hidden}
+  border-radius:6px;background:var(--plate);padding:2px;overflow:hidden}
 .ic img{width:100%;height:100%;object-fit:contain;display:block}
 .ic.fb{background:var(--raise);color:var(--ink-4);padding:0;
   font-family:"JetBrains Mono",monospace;font-size:12px}
@@ -224,8 +288,10 @@ button{font:inherit;color:inherit;background:none;border:none}
   .head .t{flex:1 1 auto;gap:0}
   .head h1{display:none}
   .head p{display:none}
-  .langsel{position:fixed;top:10px;right:14px;z-index:10}
-  .langsel select{padding:5px 7px;font-size:11px;min-height:34px}
+  .corner{position:fixed;top:9px;right:12px;z-index:10;gap:5px}
+  .langsel select,.themesel{height:34px}
+  .langsel select{padding:0 22px 0 8px;line-height:32px}
+  .themesel button{width:31px}
   .seg{width:100%}
   .seg button{flex:1;text-align:center;padding:9px 0;min-height:38px}
   .search{width:100%}
@@ -245,7 +311,7 @@ button{font:inherit;color:inherit;background:none;border:none}
   .thead{display:none}
   .viewport{overflow:visible;height:auto}
 
-  .row{display:block;padding:0;border-bottom:1px solid #171e25}
+  .row{display:block;padding:0;border-bottom:1px solid var(--rowline)}
   .mcard{display:flex;gap:10px;padding:11px 14px;height:var(--row);align-items:flex-start}
   .mcard .rn{width:19px;flex-shrink:0;padding-top:8px;text-align:right}
   .mcard .ic{width:34px;height:34px;margin-top:2px}
@@ -267,6 +333,14 @@ button{font:inherit;color:inherit;background:none;border:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
+<script>
+/* Before the first paint, so the page never flashes the wrong theme. A stored choice
+   wins; without one nothing is set at all, which is exactly what lets the media query
+   above follow the system. Wrapped because a browser with site data blocked throws on
+   the read rather than returning null. */
+(function(){try{var t=localStorage.getItem("theme");
+if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+</script>
 </head>
 <body>
 
@@ -308,7 +382,10 @@ button{font:inherit;color:inherit;background:none;border:none}
              aria-autocomplete="list" aria-controls="ac">
       <div class="ac" id="ac" role="listbox" hidden></div>
     </div>
-    <span class="langsel"><select id="lang" aria-label="Language"></select></span>
+    <span class="corner">
+      <span class="langsel"><select id="lang" aria-label="Language"></select></span>
+      <span class="themesel" id="theme" role="group"></span>
+    </span>
   </div>
 
   <button class="disclose" id="disclose" aria-expanded="false" hidden></button>

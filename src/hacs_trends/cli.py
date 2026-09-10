@@ -57,6 +57,16 @@ def main(argv: list[str] | None = None) -> int:
     p_sl = sub.add_parser("load-stars", help="Load the bootstrap output into star_daily")
     p_sl.add_argument("--dir", default="data/stars")
 
+    p_rd = sub.add_parser(
+        "refresh-stars-daily",
+        help="Daily top-up: only repositories whose GitHub star count moved since yesterday",
+    )
+    p_rd.add_argument("--dir", default="data/stars")
+    p_rd.add_argument("--weeks", type=int, default=2,
+                      help="weeks of history to request per moved repo (default: 2, covers the 7/30-day windows)")
+    p_rd.add_argument("--per-page", type=int, default=2,
+                      help="weeks per API page — 2 keeps each moved repo to a single request")
+
     p_rr = sub.add_parser(
         "refine-releases",
         help="Second pass for repositories that hit the release fetch ceiling",
@@ -155,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         from pathlib import Path as _P
 
         from .db import make_engine, make_session_factory
-        from .star_history import coverage, load_bootstrap
+        from .star_history import coverage, load_bootstrap, load_daily_slices
 
         root = _P(args.dir)
         if not root.is_absolute():
@@ -166,6 +176,10 @@ def main(argv: list[str] | None = None) -> int:
         Session = make_session_factory(engine)
         with Session() as session:
             stats = load_bootstrap(session, root / "star_days.jsonl")
+            # The DB is rebuilt from scratch every run (it's a cache, see sync.yml) —
+            # the daily top-up slices carry fresher counts for the days they cover and
+            # have to be replayed on top of the bootstrap every time, not just once.
+            stats["daily"] = load_daily_slices(session, root)
             stats.update(coverage(session))
         print(json.dumps(stats, indent=2))
         return 0
@@ -183,6 +197,24 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(run_bootstrap(config, root, limit=args.limit, delay=args.delay,
                                        weeks=args.weeks, changed_only=args.changed_only,
                                        api_base=args.api_base), indent=2))
+        return 0
+
+    if args.command == "refresh-stars-daily":
+        from pathlib import Path as _P
+
+        from .db import make_engine, make_session_factory
+        from .star_history import run_daily_refresh
+
+        root = _P(args.dir)
+        if not root.is_absolute():
+            from .config import ROOT
+
+            root = ROOT / args.dir
+        engine = make_engine(config.db_path)
+        Session = make_session_factory(engine)
+        with Session() as session:
+            stats = run_daily_refresh(config, session, root, weeks=args.weeks, per_page=args.per_page)
+        print(json.dumps(stats, indent=2))
         return 0
 
     if args.command == "refine-releases":

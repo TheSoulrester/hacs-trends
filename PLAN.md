@@ -1,6 +1,6 @@
 # betterHACs — Design and Data Plan (v2)
 
-Revised 2026-09-05. Supersedes v1 (kept as `docs-de-PLAN-v1.md` for the record).
+Revised 2026-09-05. Supersedes v1 (kept as `docs/PLAN-v1-de.md` for the record).
 
 **Goal.** A public page where the Home Assistant community can find out which HACS
 repositories are gaining traction — and which ones look abandoned. Free to run, hosted
@@ -964,3 +964,77 @@ prose, which would have been wrong within a week and wrong forever after. Prose 
 "more than four thousand", and the exact counts survive only inside measurement statements,
 where they are dated by their wording ("when it was measured"). A figure in a README that
 nothing keeps up to date is a claim with an expiry date on it.
+
+## 14. Daily star refresh, and a request-cost bug caught by testing
+
+Alex asked two things together on 9 Sept: could the star query be made cheaper, and could
+it run daily instead of weekly. Measured beforehand: a full weekly bootstrap costs 7,221
+requests for 4,193 repositories, and only 180-300 of them gain a star on a typical day.
+
+### 14.1 The design
+
+The GraphQL `enrich` step already queries every repository once a day for release and
+commit data. Adding `stargazerCount` to that fragment cost nothing extra — cost=1 per batch
+of 50, measured with and without the field. That is a free, same-request signal for which
+repositories moved since the daily job last checked: a small committed watermark file
+(`data/stars/gh_watermark.json.gz`, repo id → last known `stargazerCount`) is compared
+against the fresh value, and only the repositories that differ get a real
+`stargazers/history` request — one page each, at `per_page=2` (verified byte-identical to
+the first two buckets of a `per_page=30` answer). Runs on the automatic `GITHUB_TOKEN`, in
+`sync.yml`, right after `enrich`.
+
+The result is written as a small dated slice under `data/stars/daily/YYYY-MM-DD.jsonl.gz`,
+one file per day that actually had moved repositories — mirroring `data/snapshots/` rather
+than appending to the single 281 KB `star_days.jsonl.gz` blob, which would mean
+re-committing and re-diffing that whole file every day. `load-stars` now replays the
+bootstrap file and every daily slice on each run, same as it always rebuilds the rest of
+the database from committed files.
+
+The weekly full bootstrap (`refresh-stars.yml`) is untouched and keeps running: it is the
+source of full depth (quarter/year windows) and the self-healing fallback if a daily slice
+is ever lost.
+
+### 14.2 A cost bug the tests caught before it shipped
+
+A repository with no watermark entry counts as "moved" by construction — new to HACS, or
+never checked by this feature before. First implementation fetched all of them for real,
+which is correct for a genuinely new repository and wasteful for every other one: the very
+first run after this ships would have found all ~4,200 repositories without a watermark and
+fetched every single one, even though the weekly bootstrap already has full history for
+essentially all of them. Rate-limited by `_respect_limits` it would not have failed, just
+taken several hours instead of a few minutes on day one, and spent most of the automatic
+token's hourly budget doing it.
+
+Fixed by splitting "no watermark" into two cases: a repository that already has rows in
+`star_daily` gets its watermark seeded directly from the just-fetched `stargazerCount`, no
+request spent; only a repository with no history at all still gets fetched.
+
+Caught while writing `tests/test_daily_refresh.py`, not after. The fake-GitHub harness
+already built for `test_bootstrap.py` was reused, plus a real end-to-end pass through
+`hacs-trends refresh-stars-daily` and `hacs-trends load-stars` against a temporary SQLite
+database in a throwaway virtualenv (the CLI cannot be run from the mounted repository
+without touching the real `.venv`). 21 checks, all passing: first-run detection, a no-op on
+an unchanged run, partial re-fetch after a real change, a failed per-repo fetch that keeps
+its old watermark and is retried tomorrow without aborting the rest of the batch, the
+seed-without-fetch path, and a full from-scratch rebuild replaying the bootstrap plus every
+daily slice — the exact sequence `sync.yml` runs on every CI job, since the database is a
+disposable cache.
+
+### 14.3 The CI crash
+
+The run that failed on 9 Sept at 19:50 UTC was not one of the known GraphQL failure modes.
+The traceback was a `JSONDecodeError` inside `_post()`'s `resp.json()`, reached only when
+`status_code == 200` — GitHub had answered the batch with an empty body on a 200. Fixed the
+same way the function already handles a 502: retry with the same backoff, and raise
+`SourceError` (which `enrich()` already turns into a batch-halving retry rather than a
+crash) only once the retries are exhausted.
+
+### 14.4 Left open
+
+Whether to surface star freshness in the interface (`meta.star_history.latest_day` is
+already exported and now moves daily) is still just sitting in the data — nothing in
+`app.js` reads it. Not built this round because it was not what was asked for; worth doing
+once the daily refresh has run a few times and the date is worth showing.
+
+Not done: the git/folder cleanup requested on 9 Sept (files that should not be tracked, a
+consistent `.gitignore`).
