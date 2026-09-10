@@ -32,6 +32,22 @@ Open the link.
 > Not an official HACS project. It only uses information that HACS, Home Assistant and
 > GitHub already publish openly.
 
+## How it works
+
+Four public sources feed a small job that runs on GitHub's own machines, twice a day.
+It asks each one the same handful of questions, writes down what changed, and rebuilds
+the page. Nothing here is a server — there is nothing for anyone to keep running.
+
+![Where the data comes from, and where it ends up: four sources, one scheduled job, a static page on GitHub Pages](docs/diagrams/architecture.png)
+
+Every run is one GitHub Action with four stages: collect the day's numbers, enrich them
+with GitHub's own data, commit the result as plain text, then package and deploy the
+page. If the commit step fails — a push conflict, usually — the run is marked failed,
+but the page that was already built is deployed anyway: a bad run costs a day of
+history, never a broken site.
+
+![The four stages one run of the "Collect and publish" workflow goes through, and what happens if the commit step fails](docs/diagrams/workflow.png)
+
 ## How to use it
 
 **Pick a question on the left.** There are seven, and each is a different way of being
@@ -69,6 +85,11 @@ theme…) and by how regularly the project publishes releases.
 and the figures for the question you picked. The number on the far left is its place in
 the full ranking — and it stays put when you search, so finding something at 412 tells
 you something that finding it at 1 would not.
+
+This is what "Possibly unmaintained" looks like in practice — sorted by time since the
+last commit, oldest first:
+
+![The "Possibly unmaintained" view: repositories with no commit in years, most untouched for well over five](docs/screenshot-maintenance.png)
 
 ## Reading the numbers honestly
 
@@ -191,7 +212,7 @@ would otherwise just be a list of projects that went from 2 stars to 4.
 
 **Installations are matched to a repository by the integration's internal name.** Where
 two repositories claim the same one, the figure is flagged as ambiguous instead of being
-given to either. That happens for 43 of them.
+given to either.
 
 <details>
 <summary><b>Column by column — where every single figure comes from</b></summary>
@@ -214,24 +235,25 @@ given to either. That happens for 43 of them.
 | **Gaining and in use** | The percentile rank of star growth and of installation growth, ranked on the **lower** of the two, so a repository has to be strong in both. Both component ranks get their own column: a placement is never a black box. |
 | **In HACS since** | The first commit that added the repository to the lists in `hacs/default` — exact back to 20 October 2019, and matched for nearly every repository. The ones without a date are HACS itself, which is not in its own list, and repositories renamed on GitHub since. Everything stamped with 20 October 2019 is shown as "since the start" rather than dated: that is the day the list was written from an older location, so those were already in HACS and the real date is gone. |
 | **New in HACS** | Ranked by that acceptance date. The first daily slice a repository appears in is kept as a fallback for anything the list has not caught up with. |
-| **Downloads** | The release asset counter from the HACS dataset. Only 33 % of repositories have one, because HACS installs from source when a release carries no assets. Shown, never ranked on. |
+| **Downloads** | The release asset counter from the HACS dataset. Only about a third of repositories have one, because HACS installs from source when a release carries no assets. Shown, never ranked on. |
 | **Rank number** | The position in the current view's full ranking, assigned before your search and filters are applied — so a search result also tells you where it stands. |
 
 **What is deliberately not measured**
 
-Watchers (median 1, P90 8 across the corpus — too sparse to rank on), issue close rates
-as a quality signal, anything from a repository's code or README, and anything about the
-people behind a repository. There is no scoring formula that blends several figures into
-one number: every ranking is one figure you can name, with the others shown next to it.
+Watchers (too sparse across the corpus to rank on), issue close rates as a quality
+signal, anything from a repository's code or README, and anything about the people
+behind a repository. There is no scoring formula that blends several figures into one
+number: every ranking is one figure you can name, with the others shown next to it.
 
 **Check it yourself**
 
 Every daily slice is committed as text under `data/snapshots/`, and the star history as
 `data/stars/star_days.jsonl.gz`. The exported file the page reads is `web/data.json`.
-[PLAN.md](PLAN.md) documents each measurement in full, including the assumptions that
-turned out to be wrong.
 
 </details>
+
+[PLAN.md](PLAN.md) records the design decisions behind all of this, and — more usefully
+— the measurements that overturned several of them along the way.
 
 ## How it stays up to date
 
@@ -250,7 +272,8 @@ pay for or look after.
 Star counts are therefore at most a day old, same as everything else on the page — not
 up to seven days behind, which was true before the daily top-up existed.
 
-### Where the history lives
+<details>
+<summary><b>Where the history lives</b></summary>
 
 Not in a database — that is only a cache, rebuilt on every run. The record is committed
 as plain text:
@@ -263,6 +286,8 @@ as plain text:
 
 A committed database file would have added its full size to the repository's history on
 every single run.
+
+</details>
 
 ## Publish your own copy
 
@@ -292,13 +317,3 @@ useful immediately and never leaves someone staring at a blank interface.
 
 `python tools/check_i18n.py` reports how complete each file is and fails on keys that
 exist nowhere else or placeholders that no longer match.
-
-## Sources
-
-- HACS dataset: `https://data-v2.hacs.xyz/<category>/data.json`
-- Home Assistant analytics: `https://analytics.home-assistant.io/custom_integrations.json`
-- GitHub GraphQL and the star history endpoint
-- The git history of [`hacs/default`](https://github.com/hacs/default)
-
-[PLAN.md](PLAN.md) records the design decisions and, more usefully, the measurements
-that overturned several of them.
