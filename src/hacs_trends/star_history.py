@@ -53,9 +53,16 @@ def _open_any(path: Path):
     """
     import gzip
 
+    gz = path.with_suffix(path.suffix + ".gz")
+    # Both can exist: a local bootstrap leaves the plain file behind, and a pull brings a
+    # newer .gz from the weekly refresh. Whichever was written last is the current one -
+    # preferring the plain file unconditionally had local builds read a week-old history.
+    if path.is_file() and gz.is_file():
+        if gz.stat().st_mtime > path.stat().st_mtime:
+            return gzip.open(gz, "rt")
+        return path.open()
     if path.is_file():
         return path.open()
-    gz = path.with_suffix(path.suffix + ".gz")
     if gz.is_file():
         return gzip.open(gz, "rt")
     raise FileNotFoundError(

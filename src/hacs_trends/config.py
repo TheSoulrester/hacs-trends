@@ -1,4 +1,4 @@
-"""Zentrale Konfiguration. Alles über Umgebungsvariablen, nichts hartkodiert."""
+"""Central configuration. Everything through environment variables, nothing hard-coded."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ load_dotenv()
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# HACS-Kategorien mit veröffentlichtem Datensatz.
-# netdaemon hat in der HACS-Codebasis kein Validierungsschema, liefert aber Daten (4 Repos)
-# — deshalb hier bewusst enthalten, aber gesondert behandelt.
+# HACS categories with a published dataset.
+# netdaemon has no validation schema in the HACS code base but does deliver data (4 repos)
+# - included on purpose, but handled separately.
 CATEGORIES = (
     "integration",
     "plugin",
@@ -26,13 +26,13 @@ CATEGORIES = (
     "netdaemon",
 )
 
-# Kategorien, für die HACS ein Schema pflegt. Alles andere wird toleranter validiert.
+# Categories HACS maintains a schema for. Everything else is validated more leniently.
 SCHEMA_CATEGORIES = frozenset(
     {"integration", "plugin", "theme", "template", "python_script", "appdaemon"}
 )
 
 HACS_DATA_BASE = "https://data-v2.hacs.xyz"
-# Die kuratierten Kategorielisten — nur fuer den Abgleich, siehe fetch_default_lists.
+# The curated category lists - only for the cross-check, see fetch_default_lists.
 HACS_DEFAULT_BASE = "https://raw.githubusercontent.com/hacs/default/master"
 HA_ANALYTICS_URL = "https://analytics.home-assistant.io/custom_integrations.json"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
@@ -46,7 +46,7 @@ GITHUB_API_BASE = "https://api.github.com"
 # (Settings -> Secrets and variables -> Actions -> Variables), see sync.yml.
 RANK_ARROW_MIN_DEFAULT = 3
 
-USER_AGENT = "betterHACs/0.1 (+https://github.com/hacs-trends; HACS trend dashboard)"
+USER_AGENT = "hacs-trends/0.1 (+https://github.com/TheSoulrester/hacs-trends; HACS trend dashboard)"
 
 
 @dataclass(frozen=True)

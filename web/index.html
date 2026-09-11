@@ -138,16 +138,16 @@ button{font:inherit;color:inherit;background:none;border:none}
 .ac .an{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
 .ac .as{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--ink-4);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:auto}
-/* Sprache und Theme sind ein Paar in der Ecke. Die Sprache bleibt bewusst ein select
-   und wird kein Segment: zwei Sprachen passen in eine Leiste, fuenf nicht, und die Liste
-   soll wachsen koennen, ohne die Kopfleiste neu zu bauen. Beide bekommen deshalb
-   denselben Rahmen, dieselbe Rundung, dieselbe Hoehe und dieselbe Schrift, damit sie als
-   eine Gruppe gelesen werden. Der Pfeil ist selbst gezeichnet statt vom System geliehen,
-   weil das Systemdreieck seine Farbe nicht vom Thema nimmt. */
+/* Language and theme are a pair in the corner. The language stays a select on purpose
+   rather than a segmented control: two languages fit in a bar, five do not, and the list
+   should be able to grow without rebuilding the header. Both therefore get the same
+   border, radius, height and font, so they read as one group. The arrow is drawn here
+   rather than borrowed from the system, because the system triangle does not take its
+   colour from the theme. */
 .corner{display:flex;align-items:center;gap:7px}
-/* Zeitfenster, Suche, Sprache und Theme stehen in einer Reihe und sollen wie ein
-   Satz Bedienelemente wirken, nicht wie vier zufaellig hohe Kaesten. Gemeinsame Hoehe
-   32px, box-sizing:border-box (siehe *{} oben) rechnet Rahmen und Innenabstand hinein. */
+/* Window, search, language and theme stand in one row and should look like one set of
+   controls, not four boxes of random height. Shared height 32px; box-sizing:border-box
+   (see *{} above) includes border and padding. */
 .langsel{position:relative;display:inline-flex}
 .langsel::after{content:"";position:absolute;right:9px;top:50%;margin-top:-2px;
   pointer-events:none;width:0;height:0;border:4px solid transparent;border-top-color:var(--ink-3)}

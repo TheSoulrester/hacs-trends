@@ -8,7 +8,7 @@
 **Which Home Assistant custom integrations are alive — and which have quietly been
 abandoned.**
 
-![The dashboard, ranking the repositories that gained the most stars in the last 30 days](docs/screenshot.png)
+![The dashboard in its dark and light theme, here the "Possibly unmaintained" view: repositories sorted by time since the last commit](docs/screenshot.png)
 
 ## What this is
 
@@ -84,7 +84,10 @@ theme…) and by how regularly the project publishes releases.
 **Every row** shows the project's name and author, what it does, its newest version,
 and the figures for the question you picked. The number on the far left is its place in
 the full ranking — and it stays put when you search, so finding something at 412 tells
-you something that finding it at 1 would not.
+you something that finding it at 1 would not. A small green or red arrow beside it means
+the project climbed or fell at least three places since yesterday in that same list;
+hover over it for yesterday's place. Arrows appear in *Gaining attention*, *Actually
+being used* and *Rising for their size*, the lists whose order is a trend.
 
 This is what "Possibly unmaintained" looks like in practice — sorted by time since the
 last commit, oldest first:
@@ -253,9 +256,6 @@ Every daily slice is committed as text under `data/snapshots/`, and the star his
 
 </details>
 
-[PLAN.md](PLAN.md) records the design decisions behind all of this, and — more usefully
-— the measurements that overturned several of them along the way.
-
 ## How it stays up to date
 
 Two scheduled jobs run on GitHub's own machines. Nothing runs on a server anybody has to
@@ -296,9 +296,13 @@ every single run.
 2. *Settings → Pages* → source **GitHub Actions**.
 3. *Settings → Actions → General → Workflow permissions* → **Read and write**, so the
    run can commit each day's figures.
-4. *Settings → Secrets → Actions* → add `STAR_HISTORY_TOKEN` (only needed for the weekly
-   star refresh).
+4. *Settings → Secrets and variables → Actions → Secrets* → add `STAR_HISTORY_TOKEN`
+   (only needed for the weekly star refresh).
 5. *Actions → Collect and publish → Run workflow* once to get it started.
+
+Optional: under *Settings → Secrets and variables → Actions → Variables*, a variable
+`HACS_TRENDS_RANK_ARROW_MIN` sets how many places a project has to move before it gets a
+rank arrow (default 3). It takes effect with the next run.
 
 The site appears at `https://<account>.github.io/<repo>/` after the first successful
 run. Before that the address returns 404, because the site does not exist yet.

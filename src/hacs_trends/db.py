@@ -1,5 +1,5 @@
-"""Datenmodell. Schlüssel ist überall die GitHub-Repo-ID, nie der Name —
-Repositories werden umbenannt, IDs nicht."""
+"""Data model. The key is always the GitHub repository ID, never the name -
+repositories get renamed, IDs do not."""
 
 from __future__ import annotations
 
@@ -25,27 +25,27 @@ class Base(DeclarativeBase):
 
 
 class Repo(Base):
-    """Stammdaten aus dem HACS-Datensatz."""
+    """Master data from the HACS dataset."""
 
     __tablename__ = "repos"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # GitHub-Repo-ID
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # GitHub repository ID
     category: Mapped[str] = mapped_column(String(32), index=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
     description: Mapped[str | None] = mapped_column(Text)
     manifest_name: Mapped[str | None] = mapped_column(String(255))
     domain: Mapped[str | None] = mapped_column(String(128), index=True)
-    topics: Mapped[str] = mapped_column(Text, default="[]")  # JSON-Array
+    topics: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     country: Mapped[str | None] = mapped_column(String(64))
 
     first_seen: Mapped[date] = mapped_column(Date, index=True)
     last_seen: Mapped[date] = mapped_column(Date, index=True)
 
-    # Aufnahmedatum aus der Git-Historie von hacs/default. Nicht mit first_seen zu
-    # verwechseln: first_seen ist der Tag, an dem WIR das Repo erstmals gesehen haben.
+    # Acceptance date from the git history of hacs/default. Not to be confused with
+    # first_seen, which is the day THIS project first saw the repository.
     added_to_hacs: Mapped[date | None] = mapped_column(Date, index=True)
 
-    # Aus /removed/data.json bzw. /critical/data.json
+    # From /removed/data.json and /critical/data.json
     is_removed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     removal_type: Mapped[str | None] = mapped_column(String(128))
     removal_reason: Mapped[str | None] = mapped_column(Text)
@@ -54,13 +54,12 @@ class Repo(Base):
 
 
 class RepoGithub(Base):
-    """Anreicherung über die GitHub-GraphQL-API. Liefert die Felder, die HACS nicht hat.
+    """Enrichment from the GitHub GraphQL API: the fields HACS does not have.
 
-    pushed_at wird hier zwar mitgeführt, ist aber redundant: eine Stichprobe gegen die
-    GitHub-API hat gezeigt, dass HACS' last_updated sekundengenau pushed_at entspricht.
-    Der Wert bleibt als Kontrolle stehen — weicht er ab, hat sich an der HACS-Quelle
-    etwas geändert. Der eigentliche Gewinn dieses Schritts ist is_archived, das es
-    sonst nirgends gibt, und released_at.
+    pushed_at is kept but redundant: a sample against the GitHub API showed that HACS'
+    last_updated matches pushed_at to the second. It stays as a control - if the two
+    ever differ, something changed at the HACS source. The real gain of this step is
+    is_archived, which exists nowhere else, and released_at.
     """
 
     __tablename__ = "repo_github"
@@ -77,7 +76,7 @@ class RepoGithub(Base):
     fork_count: Mapped[int | None] = mapped_column(Integer)
     primary_language: Mapped[str | None] = mapped_column(String(64))
     homepage: Mapped[str | None] = mapped_column(Text)
-    # Wenn GitHub das Repo nicht mehr kennt (gelöscht/privat), steht hier der Grund.
+    # When GitHub no longer knows the repository (deleted/private), the reason is here.
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     watchers: Mapped[int | None] = mapped_column(Integer)
     open_issues_gh: Mapped[int | None] = mapped_column(Integer)
@@ -108,8 +107,8 @@ class RepoGithub(Base):
 
 
 class Snapshot(Base):
-    """Ein Messpunkt je Repo und Tag. Basis für alle Delta-Werte.
-    Läuft der Sync mehrmals am Tag, gewinnt der letzte Lauf des Tages."""
+    """One data point per repository and day, the basis of every delta.
+    If the sync runs several times a day, the day's last run wins."""
 
     __tablename__ = "snapshots"
 
@@ -117,9 +116,9 @@ class Snapshot(Base):
     day: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
     taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    # Bewusst nullable: im HACS-Datensatz fehlen stargazers_count bei ~400 und
-    # downloads bei rund zwei Dritteln aller Repos. NULL heißt "kein Wert geliefert",
-    # nicht "null Sterne" — das ist ein wichtiger Unterschied für jede Sortierung.
+    # Nullable on purpose: the HACS dataset lacks stargazers_count for ~400 and
+    # downloads for about two thirds of all repositories. NULL means "no value
+    # delivered", not "zero stars" - a difference that matters for every sort.
     stars: Mapped[int | None] = mapped_column(Integer)
     downloads: Mapped[int | None] = mapped_column(Integer)
     open_issues: Mapped[int | None] = mapped_column(Integer)
@@ -129,8 +128,8 @@ class Snapshot(Base):
 
 
 class InstallSnapshot(Base):
-    """Installationszahlen aus der Home-Assistant-Analytik, je Domain und Tag.
-    Opt-in-Stichprobe, kein Absolutwert."""
+    """Installation counts from Home Assistant analytics, per domain and day.
+    An opt-in sample, not an absolute figure."""
 
     __tablename__ = "installs"
 
@@ -140,7 +139,7 @@ class InstallSnapshot(Base):
 
 
 class InstallVersion(Base):
-    """Installationen je Domain, Tag und Version — für Adoptionskurven neuer Releases."""
+    """Installations per domain, day and version - for the adoption of new releases."""
 
     __tablename__ = "installs_version"
 
@@ -151,8 +150,8 @@ class InstallVersion(Base):
 
 
 class StarEvent(Base):
-    """Einzelne Stern-Zeitstempel aus dem einmaligen Bootstrap über die Stargazer-API.
-    Nur die jüngsten ~35 Tage, nur damit die 7/30-Tage-Spalten ab Tag 1 gefüllt sind."""
+    """Individual star timestamps from the one-time bootstrap via the stargazer API.
+    Only the latest ~35 days, only so the 7/30-day columns are filled from day one."""
 
     __tablename__ = "star_events"
 
@@ -181,8 +180,8 @@ class StarDaily(Base):
 
 
 class BootstrapState(Base):
-    """Fortschritt des Stern-Bootstraps, damit der Lauf nach einem Rate-Limit-Stopp
-    oder Abbruch dort weitermacht, wo er aufgehört hat."""
+    """Progress of the star bootstrap, so a run stopped by the rate limit or an
+    interruption continues where it left off."""
 
     __tablename__ = "bootstrap_state"
 
@@ -196,12 +195,12 @@ class BootstrapState(Base):
 
 
 class RemovedRepo(Base):
-    """Die HACS-Blacklist als eigene Tabelle.
+    """The HACS removal list as a table of its own.
 
-    Wichtiger Befund aus der Verifikation: kein einziges der 447 entfernten Repos taucht
-    noch im aktuellen HACS-Datensatz auf — entfernt heißt wirklich entfernt. Die Liste
-    ist deshalb kein Flag auf bestehenden Repos, sondern ein Nachschlagewerk: verschwindet
-    ein Repo, das wir bisher verfolgt haben, steht hier der Grund.
+    Checked: none of the removed repositories still appears in the current HACS
+    dataset - removed really means removed. So the list is not a flag on existing
+    repositories but a lookup: when a repository we tracked disappears, the reason is
+    here.
     """
 
     __tablename__ = "removed_repos"
@@ -214,13 +213,11 @@ class RemovedRepo(Base):
 
 
 class ListGap(Base):
-    """Repos, die in der offiziellen HACS-Kategorieliste stehen, für die es aber
-    keinen Datensatz gibt (aktuell 52).
+    """Repositories on the official HACS category lists that have no dataset entry.
 
-    Das sind entweder frische Aufnahmen, die HACS' Datengenerator noch nicht erfasst hat,
-    oder Repos, die auf GitHub verschwunden sind. Wird mitgeführt, weil ein plötzliches
-    Anwachsen dieser Zahl bedeutet, dass die Quelle klemmt — und nicht, dass HACS
-    schrumpft.
+    Either fresh additions HACS' data generator has not picked up yet, or repositories
+    that disappeared from GitHub. Tracked because a sudden rise in this number means
+    the source is stuck - not that HACS is shrinking.
     """
 
     __tablename__ = "list_gaps"
@@ -232,8 +229,8 @@ class ListGap(Base):
 
 
 class SourceEtag(Base):
-    """ETags je Quell-URL. Unveränderte Quellen liefern 304 und kosten nichts —
-    Rücksicht gegenüber einem von der Community bezahlten Endpunkt."""
+    """ETags per source URL. Unchanged sources answer 304 and cost nothing - a courtesy
+    to an endpoint the community pays for."""
 
     __tablename__ = "source_etags"
 
@@ -266,9 +263,9 @@ def make_engine(db_path, echo: bool = False):
     @event.listens_for(engine, "connect")
     def _pragmas(dbapi_conn, _rec):
         cur = dbapi_conn.cursor()
-        # WAL ist schneller, funktioniert aber nicht auf jedem Dateisystem
-        # (Netzlaufwerke, FUSE-Mounts). Scheitert es, laeuft SQLite im Standardmodus
-        # weiter — langsamer, aber korrekt. Kein Grund, den Lauf abzubrechen.
+        # WAL is faster but does not work on every file system (network drives, FUSE
+        # mounts). If it fails, SQLite carries on in its default mode - slower, but
+        # correct. No reason to stop the run.
         try:
             cur.execute("PRAGMA journal_mode=WAL")
             cur.execute("PRAGMA synchronous=NORMAL")

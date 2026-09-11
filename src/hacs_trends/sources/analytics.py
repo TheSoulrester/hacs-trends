@@ -1,16 +1,16 @@
-"""Home-Assistant-Analytik: tatsächlich laufende Installationen je Integrations-Domain.
+"""Home Assistant analytics: installations actually running, per integration domain.
 
 https://analytics.home-assistant.io/custom_integrations.json
 
-Das ist die ehrlichste Verbreitungszahl, die öffentlich verfügbar ist — deutlich
-aussagekräftiger als der Download-Zähler der Release-Assets. Drei Einschränkungen,
-die überall mitgeführt und im UI benannt werden müssen:
+The most honest adoption figure publicly available - far more meaningful than the
+download counter of release assets. Three limits that travel with it everywhere and
+have to be named in the UI:
 
-1. Opt-in-Stichprobe. Gut für Rangfolgen, keine Absolutwahrheit.
-2. Nur Integrationen. Plugins, Themes, Templates tauchen nicht auf.
-3. Der Schlüssel ist die Integrations-Domain, nicht das Repository. Mehrere HACS-Repos
-   können dieselbe Domain beanspruchen (Forks, Nachfolgeprojekte) — dann ist die Zahl
-   nicht eindeutig zuordenbar und wird als mehrdeutig markiert statt geraten.
+1. An opt-in sample. Good for rankings, not an absolute truth.
+2. Integrations only. Plugins, themes and templates do not appear.
+3. The key is the integration domain, not the repository. Several HACS repositories
+   can claim the same domain (forks, successor projects) - then the figure cannot be
+   attributed and is marked ambiguous instead of guessed.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def fetch_analytics(fetcher: Fetcher) -> dict[str, AnalyticsEntry]:
     result = fetcher.get_json(HA_ANALYTICS_URL, fixture_name="ha_analytics.json")
     data = result.data
     if not isinstance(data, dict):
-        raise SourceError("custom_integrations.json: erwartet wurde ein Objekt")
+        raise SourceError("custom_integrations.json: expected an object")
 
     out: dict[str, AnalyticsEntry] = {}
     for domain, raw in data.items():
@@ -65,17 +65,16 @@ def fetch_analytics(fetcher: Fetcher) -> dict[str, AnalyticsEntry]:
             if isinstance(versions, dict)
             else {},
         )
-    log.info("Analytics: %d Domains", len(out))
+    log.info("Analytics: %d domains", len(out))
     return out
 
 
 def map_repos_to_domains(repos, analytics: dict[str, AnalyticsEntry]):
-    """Ordnet Repos ihren Analytics-Daten zu.
+    """Match repositories to their analytics data.
 
-    Gibt zurück: {repo_id: (domain, ambiguous)} und einen Bericht.
-    'ambiguous' heißt: mehrere HACS-Repos beanspruchen dieselbe Domain. Die Zahl wird
-    dann zwar angezeigt, aber als nicht eindeutig gekennzeichnet — sie stillschweigend
-    einem der Repos zuzuschlagen wäre eine Falschaussage.
+    Returns {repo_id: (domain, ambiguous)} and a report. 'ambiguous' means several HACS
+    repositories claim the same domain. The figure is still shown, but marked as not
+    attributable - silently giving it to one of them would be a false statement.
     """
     claims: dict[str, list[int]] = defaultdict(list)
     for repo in repos:
@@ -104,7 +103,7 @@ def map_repos_to_domains(repos, analytics: dict[str, AnalyticsEntry]):
         source_domains_without_repo=len(set(analytics) - set(claims)),
     )
     log.info(
-        "Analytics-Zuordnung: %d/%d Repos getroffen (%.1f%%), %d mehrdeutige Domains",
+        "Analytics matching: %d/%d repos matched (%.1f%%), %d ambiguous domains",
         report.matched,
         report.repos_with_domain,
         report.match_rate * 100,

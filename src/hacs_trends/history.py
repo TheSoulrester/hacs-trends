@@ -1,13 +1,12 @@
-"""Historie als Tagesscheiben im Git-Repo.
+"""History as daily slices in the git repository.
 
-Warum nicht die SQLite committen: eine Binärdatei, die sich täglich ändert, bläht die
-Git-Historie mit jedem Lauf um ihre volle Größe auf. Eine Tagesscheibe als komprimiertes
-JSON ist dagegen 35 KB — rund 13 MB im Jahr, nachgemessen.
+Why not commit the SQLite file: a binary that changes every day grows the git history
+by its full size on every run. A daily slice as compressed JSON is a few dozen KB.
 
-Die Scheiben sind damit die eigentliche Quelle der Wahrheit, die Datenbank nur ein
-abgeleiteter Cache, der bei jedem Lauf neu aufgebaut werden kann. Das hat einen
-angenehmen Nebeneffekt: ``first_seen`` muss nirgends gespeichert werden, es ergibt sich
-aus der ersten Scheibe, in der ein Repo auftaucht. Nichts kann auseinanderlaufen.
+The slices are therefore the actual source of truth, and the database only a derived
+cache that can be rebuilt on every run. A pleasant side effect: ``first_seen`` does not
+have to be stored anywhere - it follows from the first slice a repository appears in.
+Nothing can drift apart.
 """
 
 from __future__ import annotations
@@ -33,11 +32,11 @@ def slice_path(root: Path, day: date) -> Path:
 
 
 def write_slice(session, root: Path, day: date | None = None) -> Path:
-    """Schreibt die veränderlichen Werte eines Tages. Stammdaten kommen bei jedem
-    Lauf frisch aus der HACS-Quelle und gehören deshalb nicht hier hinein."""
+    """Write one day's changing values. Master data comes fresh from the HACS source
+    on every run and therefore does not belong in here."""
     day = day or session.scalar(select(func.max(Snapshot.day)))
     if day is None:
-        raise RuntimeError("Keine Snapshots vorhanden.")
+        raise RuntimeError("No snapshots in the database.")
     root.mkdir(parents=True, exist_ok=True)
 
     repos = [
@@ -65,20 +64,20 @@ def write_slice(session, root: Path, day: date | None = None) -> Path:
         "installs": installs,
     }
     path = slice_path(root, day)
-    # mtime fest, damit identischer Inhalt auch identische Bytes ergibt und Git
-    # nicht bei jedem Lauf eine Änderung sieht, wo keine ist.
+    # Fixed mtime, so identical content gives identical bytes and git does not see a
+    # change on every run where there is none.
     with gzip.GzipFile(filename="", mode="wb", fileobj=path.open("wb"), mtime=0) as fh:
         fh.write(json.dumps(payload, separators=(",", ":")).encode())
-    log.info("Tagesscheibe %s: %d Repos, %d Domains, %.0f KB", day, len(repos), len(installs),
+    log.info("Daily slice %s: %d repos, %d domains, %.0f KB", day, len(repos), len(installs),
              path.stat().st_size / 1024)
     return path
 
 
 def load_slices(session, root: Path) -> dict:
-    """Baut die Snapshot-Historie aus allen Tagesscheiben wieder auf.
+    """Rebuild the snapshot history from all daily slices.
 
-    Wird zu Beginn jedes Action-Laufs aufgerufen, weil dort eine leere Datenbank steht.
-    Bestehende Zeilen werden überschrieben, der Aufruf ist also gefahrlos wiederholbar.
+    Called at the start of every workflow run, because the database there starts empty.
+    Existing rows are overwritten, so the call is safe to repeat.
     """
     if not root.is_dir():
         return {"slices": 0, "rows": 0}
@@ -99,7 +98,7 @@ def load_slices(session, root: Path) -> dict:
         with gzip.open(path, "rb") as fh:
             payload = json.loads(fh.read())
         if payload.get("v") != SLICE_VERSION:
-            log.warning("%s hat Version %s, wird übersprungen", path.name, payload.get("v"))
+            log.warning("%s has version %s, skipped", path.name, payload.get("v"))
             continue
         day = date.fromisoformat(payload["day"])
         taken = datetime.fromisoformat(payload.get("written_at") or f"{payload['day']}T12:00:00+00:00")

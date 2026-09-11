@@ -1,4 +1,4 @@
-"""Anreicherungslauf: GitHub-Felder nachladen und in repo_github ablegen."""
+"""Enrichment run: fetch the GitHub fields and store them in repo_github."""
 
 from __future__ import annotations
 
@@ -26,9 +26,9 @@ def run_enrich(config: Config, *, limit: int | None = None, batch_size: int = 50
                resume: bool = True) -> dict:
     if not config.has_token:
         raise SystemExit(
-            "Kein GITHUB_TOKEN gesetzt.\n"
-            "Lokal: .env anlegen (siehe .env.example), ein Token ganz ohne Scopes reicht.\n"
-            "In GitHub Actions steht das Token automatisch zur Verfügung."
+            "No GITHUB_TOKEN set.\n"
+            "Locally: create .env (see .env.example); a token with no scopes at all is enough.\n"
+            "In GitHub Actions the token is provided automatically."
         )
 
     started = time.monotonic()

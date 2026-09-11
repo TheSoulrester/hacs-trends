@@ -1,11 +1,11 @@
-"""Hauptquelle: der von HACS selbst veröffentlichte Datensatz.
+"""Primary source: the dataset HACS publishes itself.
 
-https://data-v2.hacs.xyz/<kategorie>/data.json
+https://data-v2.hacs.xyz/<category>/data.json
 
-Ein Request je Kategorie deckt alle rund 4.200 Repositories ab — deshalb braucht
-dieser Teil weder Token noch Rate-Limit-Behandlung. Der Endpunkt ist allerdings
-HACS-internes Format ohne Zusicherung (v1 -> v2 hat es schon gegeben), deshalb
-wird hier streng validiert und bei Formatbruch abgebrochen.
+One request per category covers every repository - so this part needs neither a
+token nor rate-limit handling. The endpoint is an internal HACS format without any
+guarantee, though (v1 -> v2 has happened before), so it is validated strictly here and
+the run stops when the format breaks.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from .fetch import Fetcher, SourceError
 
 log = logging.getLogger(__name__)
 
-# Felder, die HACS für jede Kategorie garantiert. Fehlen sie, stimmt etwas nicht.
+# Fields HACS guarantees for every category. If they are missing, something is wrong.
 REQUIRED = ("full_name", "last_fetched")
 
-# Topics, die HACS selbst herausfiltert — sie sagen nichts über das Projekt aus.
+# Topics HACS filters out itself - they say nothing about the project.
 TOPIC_FILTER = {"home-assistant", "homeassistant", "hacs", "home-automation", "hass"}
 
 
@@ -47,8 +47,8 @@ class HacsRepo:
 
 @dataclass
 class HacsFetchReport:
-    """Was der Lauf tatsächlich gesehen hat. Wandert in sync_runs.counts und macht
-    stille Regressionen sichtbar."""
+    """What the run actually saw. Goes into sync_runs.counts and makes silent
+    regressions visible."""
 
     per_category: dict[str, int] = field(default_factory=dict)
     not_modified: list[str] = field(default_factory=list)
@@ -106,7 +106,7 @@ def _parse_repo(repo_id: str, raw: dict, category: str) -> HacsRepo | None:
 def fetch_categories(
     fetcher: Fetcher, etags: dict[str, str] | None = None
 ) -> tuple[list[HacsRepo], HacsFetchReport, dict[str, str]]:
-    """Liest alle Kategorien. Gibt Repos, einen Bericht und die neuen ETags zurück."""
+    """Read all categories. Returns the repositories, a report and the new ETags."""
     etags = etags or {}
     new_etags: dict[str, str] = {}
     repos: list[HacsRepo] = []
@@ -119,7 +119,7 @@ def fetch_categories(
 
         if result.not_modified:
             report.not_modified.append(category)
-            log.info("%s unverändert (304)", category)
+            log.info("%s unchanged (304)", category)
             continue
         if result.etag:
             new_etags[key] = result.etag
@@ -127,8 +127,8 @@ def fetch_categories(
         payload = result.data
         if not isinstance(payload, dict):
             raise SourceError(
-                f"{url}: erwartet wurde ein Objekt mit Repo-IDs als Schlüssel, "
-                f"bekommen: {type(payload).__name__}. Format hat sich vermutlich geändert."
+                f"{url}: expected an object keyed by repository ID, "
+                f"got: {type(payload).__name__}. The format has probably changed."
             )
 
         invalid = 0
@@ -147,49 +147,49 @@ def fetch_categories(
         if invalid:
             report.skipped_invalid[category] = invalid
 
-        # Ein Schema-Bruch fällt hier auf: wenn eine Kategorie mit Schema plötzlich
-        # überwiegend unlesbar ist, stimmt das Format nicht mehr.
+        # A schema break shows up here: when a category with a schema is suddenly
+        # mostly unreadable, the format is no longer what it was.
         if category in SCHEMA_CATEGORIES and payload and invalid > len(payload) * 0.1:
             raise SourceError(
-                f"{url}: {invalid} von {len(payload)} Einträgen unlesbar. "
-                "Das HACS-Datenformat hat sich vermutlich geändert — Sync abgebrochen, "
-                "damit keine halben Daten geschrieben werden."
+                f"{url}: {invalid} of {len(payload)} entries unreadable. "
+                "The HACS data format has probably changed - sync stopped so that no "
+                "half-written data ends up in the database."
             )
 
-        log.info("%-14s %5d Repos (%d unlesbar)", category, count, invalid)
+        log.info("%-14s %5d repos (%d unreadable)", category, count, invalid)
 
     return repos, report, new_etags
 
 
 def fetch_removed(fetcher: Fetcher) -> list[dict]:
-    """Repos, die HACS aus dem Store entfernt hat — mit Grund und Typ.
-    Das stärkste verfügbare 'nicht mehr benutzen'-Signal."""
+    """Repositories HACS removed from the store - with reason and type.
+    The strongest 'stop using this' signal there is."""
     result = fetcher.get_json(
         f"{HACS_DATA_BASE}/removed/data.json", fixture_name="removed.json"
     )
     data = result.data or []
     if not isinstance(data, list):
-        raise SourceError("removed/data.json: erwartet wurde eine Liste")
+        raise SourceError("removed/data.json: expected a list")
     return [r for r in data if isinstance(r, dict) and r.get("repository")]
 
 
 def fetch_critical(fetcher: Fetcher) -> list[dict]:
-    """Repos mit kritischen Sicherheitsproblemen."""
+    """Repositories with critical security problems."""
     result = fetcher.get_json(
         f"{HACS_DATA_BASE}/critical/data.json", fixture_name="critical.json"
     )
     data = result.data or []
     if not isinstance(data, list):
-        raise SourceError("critical/data.json: erwartet wurde eine Liste")
+        raise SourceError("critical/data.json: expected a list")
     return [r for r in data if isinstance(r, dict) and r.get("repository")]
 
 
 def fetch_default_lists(fetcher: Fetcher) -> dict[str, list[str]]:
-    """Die offiziellen Kategorielisten aus hacs/default.
+    """The official category lists from hacs/default.
 
-    Dient allein dem Abgleich: alles, was hier steht, aber keinen Datensatz hat, ist
-    eine Lücke in der HACS-Datenpipeline. Ohne diesen Abgleich würde ein Ausfall der
-    Datengenerierung wie ein Rückgang echter Repos aussehen.
+    Used only for the cross-check: anything listed here without a dataset entry is a
+    gap in the HACS data pipeline. Without this check, an outage of the data generation
+    would look like real repositories disappearing.
     """
     out: dict[str, list[str]] = {}
     for category in CATEGORIES:

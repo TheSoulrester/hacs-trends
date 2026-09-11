@@ -1,5 +1,5 @@
-"""Kommandozeile. Ein Einstiegspunkt, damit GitHub Action und lokale Nutzung
-denselben Weg gehen."""
+"""Command line. One entry point, so the GitHub Action and local use take the
+same path."""
 
 from __future__ import annotations
 
@@ -29,17 +29,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_sync = sub.add_parser("sync", help="HACS-Datensatz und HA-Analytik einlesen")
-    p_sync.add_argument("--fixtures", help="Verzeichnis mit heruntergeladenen JSON-Fixtures")
+    p_sync = sub.add_parser("sync", help="Read the HACS dataset and Home Assistant analytics")
+    p_sync.add_argument("--fixtures", help="Directory with downloaded JSON fixtures")
 
-    p_en = sub.add_parser("enrich", help="GitHub-Felder nachladen (pushed_at, archiviert, Release)")
-    p_en.add_argument("--limit", type=int, help="nur die ersten N Repos (zum Testen)")
+    p_en = sub.add_parser("enrich", help="Fetch the GitHub fields (pushed_at, archived, release)")
+    p_en.add_argument("--limit", type=int, help="only the first N repositories (for testing)")
     p_en.add_argument("--batch-size", type=int, default=50)
 
-    p_hw = sub.add_parser("history-write", help="Tagesscheibe der Historie schreiben")
+    p_hw = sub.add_parser("history-write", help="Write today's history slice")
     p_hw.add_argument("--dir", default="data/snapshots")
 
-    p_hl = sub.add_parser("history-load", help="Historie aus den Tagesscheiben aufbauen")
+    p_hl = sub.add_parser("history-load", help="Rebuild the history from the daily slices")
     p_hl.add_argument("--dir", default="data/snapshots")
 
     p_bs = sub.add_parser(
@@ -79,10 +79,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_hd.add_argument("--cache", default="data/cache", help="Where the clone is kept")
 
-    sub.add_parser("stats", help="Kennzahlen der Datenbank ausgeben")
+    sub.add_parser("stats", help="Print database statistics")
 
-    p_exp = sub.add_parser("export", help="Statische docs/data.json erzeugen")
-    p_exp.add_argument("--out", help="Zielpfad (Standard: docs/data.json)")
+    p_exp = sub.add_parser("export", help="Write web/data.json, the file the page loads")
+    p_exp.add_argument("--out", help="Output path (default: web/data.json)")
 
     args = parser.parse_args(argv)
     _setup_logging(args.verbose)

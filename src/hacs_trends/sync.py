@@ -1,7 +1,7 @@
-"""Orchestrierung eines Sync-Laufs: HACS-Datensatz + HA-Analytik in die SQLite.
+"""One sync run: the HACS dataset and Home Assistant analytics into SQLite.
 
-Ein Lauf schreibt genau einen Snapshot je Repo und Tag. Läuft der Sync mehrmals
-täglich, gewinnt der letzte Lauf — die Delta-Berechnung arbeitet auf Tagesbasis.
+A run writes exactly one snapshot per repository and day. If the sync runs several
+times a day, the last run wins - the deltas work on whole days.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
                 repos, report, new_etags = fetch_categories(fetcher, etags)
 
                 if not repos and report.not_modified:
-                    log.info("Alle Kategorien unverändert — nichts zu tun.")
+                    log.info("All categories unchanged - nothing to do.")
                     counts["not_modified"] = report.not_modified
                     run.status = "not_modified"
                     run.finished_at = utcnow()
@@ -93,7 +93,7 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
                 analytics = fetch_analytics(fetcher)
                 default_lists = fetch_default_lists(fetcher)
 
-            # --- Doppelte IDs über Kategorien hinweg erkennen ---------------------
+            # --- IDs that appear in more than one category ------------------------
             seen: dict[int, str] = {}
             duplicates = []
             unique_repos = []
@@ -104,7 +104,7 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
                 seen[repo.id] = repo.category
                 unique_repos.append(repo)
             if duplicates:
-                log.warning("%d Repos in mehreren Kategorien: %s", len(duplicates), duplicates[:5])
+                log.warning("%d repos in several categories: %s", len(duplicates), duplicates[:5])
             counts["duplicate_ids"] = len(duplicates)
 
             removed_by_name = {r["repository"]: r for r in removed}
@@ -140,8 +140,9 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
                     stmt.on_conflict_do_update(
                         index_elements=[Repo.id],
                         set_={
-                            # first_seen bleibt stehen — es ist das Aufnahmedatum in HACS
-                            # und damit die Basis für die "Neu in HACS"-Sicht.
+                            # first_seen is left alone: it is the day this project first
+                            # saw the repository, the fallback for "New in HACS" when the
+                            # acceptance date from hacs/default is missing.
                             "category": stmt.excluded.category,
                             "full_name": stmt.excluded.full_name,
                             "description": stmt.excluded.description,
@@ -210,8 +211,8 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
                     )
                 )
 
-            # Versionsdaten nur für zugeordnete Domains — sonst wächst die Tabelle
-            # um Zeilen, die nie jemand abfragt.
+            # Version data only for matched domains - otherwise the table grows by rows
+            # nobody ever queries.
             ver_rows = [
                 {"domain": d, "day": day, "version": v, "count": c}
                 for d in mapped_domains
@@ -230,9 +231,9 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
                     )
                 )
 
-            # --- Blacklist als Nachschlagewerk ------------------------------------
-            # Entfernte Repos stehen nicht mehr im Datensatz, deshalb bringt ein Flag
-            # auf bestehenden Repos nichts. Die Liste wird eigenstaendig gefuehrt.
+            # --- Removal list as a lookup -----------------------------------------
+            # Removed repositories are no longer in the dataset, so a flag on existing
+            # repositories would be useless. The list is kept on its own.
             if removed:
                 rm_rows = [
                     {
@@ -257,7 +258,7 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
                         )
                     )
 
-            # --- Abgleich Liste gegen Datensatz -----------------------------------
+            # --- Category lists against the dataset ------------------------------
             have = {r.full_name.lower() for r in unique_repos}
             gap_rows = []
             for category, names in default_lists.items():
@@ -285,9 +286,9 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
             counts["list_gaps"] = len(gap_rows)
             counts["list_total"] = sum(len(v) for v in default_lists.values())
 
-            # --- Verschwundene Repos ----------------------------------------------
-            # Repos, die wir schon einmal gesehen haben, die heute aber fehlen.
-            # Wenn sie in der Blacklist stehen, kennen wir den Grund.
+            # --- Vanished repositories -------------------------------------------
+            # Repositories seen before that are missing today. If they are on the
+            # removal list, the reason is known.
             vanished = session.execute(
                 select(Repo.full_name, RemovedRepo.removal_type)
                 .outerjoin(RemovedRepo, RemovedRepo.repository == Repo.full_name)
@@ -297,7 +298,7 @@ def run_sync(config: Config, *, today: date | None = None) -> dict:
             counts["vanished_with_reason"] = sum(1 for _, t in vanished if t)
             if vanished:
                 log.warning(
-                    "%d zuvor bekannte Repos fehlen heute (%d davon mit Grund in der Blacklist)",
+                    "%d previously known repos missing today (%d of them with a reason on the removal list)",
                     len(vanished),
                     counts["vanished_with_reason"],
                 )

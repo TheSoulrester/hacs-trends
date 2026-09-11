@@ -146,11 +146,10 @@ function iconHtml(r) {
 var FRESH = { cache: "no-cache" };
 
 var WINDOWS = [7, 30, 90, 365];
-/* "Gesamt" ist kein fuenftes Zeitfenster, sondern dessen Abwesenheit: sortiert nach der
-   Gesamtzahl der Sterne, ohne ein d{n}/p{n}-Feld zu befragen, das es fuer "alle Zeit"
-   nicht gibt - die Sterngeschichte deckt hoechstens 60 Wochen ab, "s" dagegen immer.
-   Nur trending bietet es an; Prozent-Wachstum (breakout) und Momentum brauchen zwingend
-   ein Fenster und wuerden bei "all" leer laufen. */
+/* "All time" is not a fifth window but the absence of one: it sorts by the total star
+   count without asking for a d{n}/p{n} field, which does not exist for "all time" - the
+   star history covers at most 60 weeks, "s" always exists. Only trending offers it;
+   percentage growth (breakout) and momentum need a window and would come up empty. */
 function windowsFor(v) { return VIEWS[v].allWindow ? WINDOWS.concat(["all"]) : WINDOWS; }
 /* Must match --row in the stylesheet: the renderer positions rows absolutely and cannot
    ask the DOM for a height it has not drawn yet. The phone layout is a card, not a table
@@ -213,7 +212,7 @@ var COLS = {
   cat:       { w: "124px", i18n: "col.category", sort: "c", str: true, cls: "hide-sm" },
   stars:     { w: "84px", i18n: "col.stars", sort: "s", right: true },
   /* 118/98/112px: measured so "label + sort arrow" fits on one line at the longest
-     German text (gemessen mit widths2.py) - the header used to wrap to a third line
+     German text (measured in the browser) - the header used to wrap to a third line
      the moment one of these became the active sort column. */
   gained:    { w: "118px", i18n: "col.starsGained", sort: function (w) { return "d" + w; }, right: true, win: true },
   growth:    { w: "98px", i18n: "col.growth", sort: function (w) { return "p" + w; }, right: true, win: true },

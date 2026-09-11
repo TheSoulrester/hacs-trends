@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Ein Befehl, der ueberall laeuft: ./run.sh
+# One command that runs anywhere: ./run.sh
 #
-# Sucht sich selbst einen brauchbaren Python, legt eine virtuelle Umgebung an,
-# installiert die Abhaengigkeiten, holt die Daten und startet die Seite.
-# Braucht kein uv, kein Homebrew, keine Adminrechte.
+# Finds a usable Python, creates a virtual environment, installs the dependencies,
+# fetches the data and starts the page. Needs no uv, no Homebrew, no admin rights.
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -12,9 +11,9 @@ VENV=".venv"
 PY=""
 
 find_python() {
-  # uv bringt seinen eigenen Python mit und ist der bequemste Weg, wenn vorhanden.
+  # uv brings its own Python and is the most convenient route when it is there.
   if command -v uv >/dev/null 2>&1; then echo "uv"; return; fi
-  # Sonst der neueste passende System-Python. SQLAlchemy braucht mindestens 3.10.
+  # Otherwise the newest suitable system Python. SQLAlchemy needs at least 3.10.
   for c in python3.13 python3.12 python3.11 python3.10 python3; do
     if command -v "$c" >/dev/null 2>&1; then
       if "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then
@@ -29,16 +28,15 @@ PY="$(find_python)"
 
 if [ -z "$PY" ]; then
   cat <<'MSG'
-Kein Python 3.10 oder neuer gefunden.
+No Python 3.10 or newer found.
 
-Der einfachste Weg, das zu aendern, ohne Adminrechte und ohne das System
-anzufassen — uv installiert sich in dein Benutzerverzeichnis und bringt
-seinen eigenen Python mit:
+The easiest way to change that, without admin rights and without touching the
+system: uv installs itself into your home directory and brings its own Python:
 
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
-Danach ein neues Terminal oeffnen und hier nochmal ./run.sh aufrufen.
-Alternativ ein aktuelles Python von python.org installieren.
+Then open a new terminal and run ./run.sh here again.
+Alternatively, install a current Python from python.org.
 MSG
   exit 1
 fi
@@ -55,14 +53,14 @@ else
   # which reads like a broken script rather than a stale link. So it is not enough to
   # check that the directory exists: the interpreter has to actually run.
   if [ -e "$VENV" ] && ! "$VENV/bin/python" -c "pass" 2>/dev/null; then
-    echo "==> Virtuelle Umgebung zeigt ins Leere, wird neu angelegt"
+    echo "==> Virtual environment points nowhere, recreating it"
     rm -rf "$VENV"
   fi
   if [ ! -x "$VENV/bin/python" ]; then
-    echo "==> Lege virtuelle Umgebung an ($VENV)"
+    echo "==> Creating virtual environment ($VENV)"
     "$PY" -m venv "$VENV"
   fi
-  echo "==> Installiere Abhaengigkeiten"
+  echo "==> Installing dependencies"
   "$VENV/bin/python" -m pip install --quiet --upgrade pip
   "$VENV/bin/python" -m pip install --quiet -e .
   RUN="$VENV/bin/python -m"
@@ -88,8 +86,14 @@ case "${1:-serve}" in
     cmd bootstrap-stars
     ;;
   test)
-    if [ "$PY" = "uv" ]; then uv run python tests/test_bootstrap.py
-    else "$VENV/bin/python" tests/test_bootstrap.py; fi
+    # Plain scripts, no test framework: each prints PASS/FAIL per check and exits non-zero
+    # if any check failed. Every tests/test_*.py runs, so a new one needs no wiring here.
+    fail=0
+    for t in tests/test_*.py; do
+      echo "==> $t"
+      if [ "$PY" = "uv" ]; then uv run python "$t" || fail=1; else "$VENV/bin/python" "$t" || fail=1; fi
+    done
+    exit "$fail"
     ;;
   export) cmd export --out web/data.json ;;
   stats)  cmd stats ;;
@@ -103,9 +107,9 @@ case "${1:-serve}" in
     if command -v node >/dev/null 2>&1; then
       node --check web/app.js || fail=1
     else
-      echo "    node nicht gefunden, uebersprungen"
+      echo "    node not found, skipped"
     fi
-    echo "==> Sprachdateien"
+    echo "==> Translations"
     if [ "$PY" = "uv" ]; then uv run python tools/check_i18n.py || fail=1
     else "$VENV/bin/python" tools/check_i18n.py || fail=1; fi
     echo "==> Python"
@@ -126,12 +130,14 @@ for path in sys.argv[1:]:
         raise SystemExit(1)
 PYCHECK
     else
-      echo "    PyYAML nicht installiert, uebersprungen"
+      echo "    PyYAML not installed, skipped"
     fi
-    echo "==> Testsuite"
-    if [ "$PY" = "uv" ]; then uv run python tests/test_bootstrap.py >/dev/null || fail=1
-    else "$VENV/bin/python" tests/test_bootstrap.py >/dev/null || fail=1; fi
-    if [ "$fail" -eq 0 ]; then echo; echo "Alles in Ordnung."; else echo; echo "Fehler gefunden - siehe oben." >&2; fi
+    echo "==> Tests"
+    for t in tests/test_*.py; do
+      if [ "$PY" = "uv" ]; then uv run python "$t" >/dev/null || { echo "    $t failed"; fail=1; }
+      else "$VENV/bin/python" "$t" >/dev/null || { echo "    $t failed"; fail=1; }; fi
+    done
+    if [ "$fail" -eq 0 ]; then echo; echo "All good."; else echo; echo "Problems found - see above." >&2; fi
     exit "$fail"
     ;;
   enrich)
@@ -160,7 +166,7 @@ PYCHECK
     cmd export --out web/data.json
     ;;
   serve)
-    echo "==> Daten holen"
+    echo "==> Fetching data"
     cmd sync
     # Order matters: sync builds the repository list, history attaches to it.
     [ -d data/snapshots ] && cmd history-load || true
@@ -168,7 +174,7 @@ PYCHECK
     echo "==> Export"
     cmd export --out web/data.json
     echo
-    echo "==> Seite laeuft auf http://localhost:8000  (Abbruch mit Strg-C)"
+    echo "==> Page running at http://localhost:8000  (stop with Ctrl-C)"
     if [ "$PY" = "uv" ]; then uv run python -m http.server -d web 8000
     else "$VENV/bin/python" -m http.server -d web 8000; fi
     ;;

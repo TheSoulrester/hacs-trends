@@ -1,4 +1,4 @@
-"""Gemeinsame Abrufschicht: HTTP mit ETag-Unterstützung, optional aus Fixtures."""
+"""Shared fetch layer: HTTP with ETag support, optionally served from fixtures."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ log = logging.getLogger(__name__)
 
 
 class SourceError(RuntimeError):
-    """Die Quelle war nicht abrufbar oder hat unbrauchbare Daten geliefert.
+    """The source could not be reached or returned unusable data.
 
-    Wird bewusst laut geworfen statt still zu schlucken: ein Sync, der halbe Daten
-    schreibt, ist schlimmer als ein Sync, der abbricht.
+    Raised loudly on purpose instead of being swallowed: a sync that writes half the
+    data is worse than a sync that stops.
     """
 
 
@@ -56,8 +56,8 @@ class Fetcher:
         fixture_name: str | None = None,
         etag: str | None = None,
     ) -> FetchResult:
-        """Holt JSON. Liegt ein Fixture-Verzeichnis vor und enthält es die Datei,
-        wird sie benutzt — so ist der Collector ohne Netzzugang entwickelbar."""
+        """Fetch JSON. If a fixture directory is set and contains the file, that is used
+        instead - so the collector can be developed without network access."""
         if self.fixtures and fixture_name:
             path = self.fixtures / fixture_name
             if path.is_file():
@@ -68,16 +68,16 @@ class Fetcher:
         try:
             resp = self._client.get(url, headers=headers)
         except httpx.HTTPError as exc:
-            raise SourceError(f"{url} nicht erreichbar: {exc}") from exc
+            raise SourceError(f"{url} not reachable: {exc}") from exc
 
         if resp.status_code == 304:
             return FetchResult(None, etag, not_modified=True)
         if resp.status_code != 200:
-            raise SourceError(f"{url} antwortete mit HTTP {resp.status_code}")
+            raise SourceError(f"{url} answered with HTTP {resp.status_code}")
 
         try:
             data = resp.json()
         except ValueError as exc:
-            raise SourceError(f"{url} lieferte kein gültiges JSON: {exc}") from exc
+            raise SourceError(f"{url} returned invalid JSON: {exc}") from exc
 
         return FetchResult(data, resp.headers.get("etag"))

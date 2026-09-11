@@ -1,7 +1,7 @@
-"""Statischer Export: aus der SQLite wird eine einzelne JSON, die die Seite lädt.
+"""Static export: the SQLite database becomes a single JSON file the page loads.
 
-Bewusst klein gehalten — die Datei geht bei jedem Seitenaufruf über die Leitung.
-Kurze Schlüssel, keine Null-Felder, Datumswerte auf den Tag gekürzt.
+Kept small on purpose - the file goes over the wire on every page view.
+Short keys, no null fields, dates cut to the day.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from sqlalchemy import func, select
 
-from .config import RANK_ARROW_MIN_DEFAULT, Config
+from .config import RANK_ARROW_MIN_DEFAULT, ROOT, Config
 from .db import InstallSnapshot, Repo, Snapshot, make_engine, make_session_factory
 from .metrics import (
     HealthThresholds,
@@ -99,7 +99,7 @@ def build_payload(
 ) -> dict:
     today = today or session.scalar(select(func.max(Snapshot.day)))
     if today is None:
-        raise RuntimeError("Keine Snapshots in der Datenbank — erst 'hacs-trends sync' laufen lassen.")
+        raise RuntimeError("No snapshots in the database - run 'hacs-trends sync' first.")
 
     # Stars come from the bootstrapped history when it is there: an exact sum over
     # days, with no reference snapshot to pick and no tolerance to apply. Only if the
@@ -185,8 +185,8 @@ def build_payload(
     repos = []
     for r in rows:
         info = gh.get(r.id, {})
-        # last_updated aus HACS ist bereits das echte Commit-Datum (nachgemessen).
-        # pushed_at aus der Anreicherung dient nur als Rueckfallebene.
+        # last_updated from HACS already is the real commit date (checked against GitHub).
+        # pushed_at from the enrichment is only the fallback.
         activity = r.last_updated or info.get("pushed_at")
         health, age = classify_health(
             last_activity=activity,
@@ -257,7 +257,7 @@ def build_payload(
         if inst is not None:
             item["inst"] = inst
             if dom_entry and dom_entry[1]:
-                item["amb"] = 1  # Domain von mehreren Repos beansprucht
+                item["amb"] = 1  # domain claimed by several repositories
         if use_history:
             item.update(_star_window_fields(r.stars, star_windows, r.id))
         elif sd:
@@ -361,7 +361,9 @@ def build_payload(
 def export(config: Config, out_path: Path | None = None) -> Path:
     engine = make_engine(config.db_path)
     Session = make_session_factory(engine)
-    out_path = out_path or (config.db_path.parent.parent / "docs" / "data.json")
+    # Where the page reads it from. This used to default to docs/data.json, a path left
+    # over from an earlier layout that nothing reads; every caller passed --out to avoid it.
+    out_path = out_path or (ROOT / "web" / "data.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with Session() as session:
         payload = build_payload(session, rank_arrow_min=config.rank_arrow_min)

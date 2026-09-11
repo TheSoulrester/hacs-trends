@@ -1,13 +1,12 @@
-"""Kennzahlen aus den Snapshots: Delta-Werte und Wartungszustand.
+"""Figures derived from the snapshots: deltas and maintenance state.
 
-Zwei Regeln, die den Rest der Datei erklären:
+Two rules explain the rest of this file:
 
-1. Ein fehlender Wert ist NULL, nie 0. Gibt es keinen ausreichend alten Snapshot,
-   ist das Delta unbekannt — und "unbekannt" als "keine Veränderung" darzustellen
-   würde jede Sortierung verfälschen.
-2. Referenztage werden global gewählt, nicht je Repo. Ein Sync schreibt immer alle
-   Repos gemeinsam, also ist derselbe Stichtag für alle korrekt und um Größenordnungen
-   schneller als eine Suche je Repo.
+1. A missing value is NULL, never 0. Without a snapshot old enough, the delta is
+   unknown - and showing "unknown" as "no change" would distort every sort.
+2. Reference days are chosen globally, not per repository. A sync always writes all
+   repositories together, so the same reference day is correct for all of them and
+   orders of magnitude faster than a search per repository.
 """
 
 from __future__ import annotations
@@ -22,23 +21,22 @@ from .db import InstallSnapshot, RepoGithub, Snapshot
 
 log = logging.getLogger(__name__)
 
-# Wie weit der tatsächliche Stichtag vom gewünschten abweichen darf.
-# Ein ausgefallener Lauf soll die Spalte nicht leeren, ein zwei Wochen alter
-# Ersatzwert sie aber auch nicht verfälschen.
+# How far the actual reference day may be from the wanted one. A missed run should
+# not empty the column, but a two-week-old stand-in should not distort it either.
 TOLERANCE = {7: 2, 30: 4}
 
-# Ab wie vielen Sternen ein prozentualer Zuwachs überhaupt aussagekräftig ist.
-# Bei einem Median von 13 Sternen würde eine Sortierung nach Prozent sonst
-# ausschließlich Repos zeigen, die von 2 auf 4 Sterne gestiegen sind.
+# From how many stars a percentage gain means anything. With a median of 13 stars,
+# sorting by percentage would otherwise show nothing but repositories that went from
+# 2 stars to 4.
 MIN_BASE_FOR_PERCENT = 25
 
 
 @dataclass
 class HealthThresholds:
-    """Grenzen für die Wartungsampel, in Tagen seit dem letzten Commit.
+    """Boundaries of the maintenance state, in days since the last commit.
 
-    Die Voreinstellung stammt aus der gemessenen Verteilung über alle 4.193 Repos
-    (Median 55 Tage, P75 208, P90 689) und nicht aus dem Bauchgefühl.
+    The defaults come from the measured distribution over all repositories (median 55
+    days, P75 208, P90 689 when they were set), not from gut feeling.
     """
 
     active: int = 90
@@ -55,7 +53,7 @@ class Deltas:
 
 
 def _pick_reference_day(available: list[date], today: date, days: int) -> date | None:
-    """Der verfügbare Snapshot-Tag, der dem Wunschstichtag am nächsten liegt."""
+    """The available snapshot day closest to the wanted reference day."""
     target = today - timedelta(days=days)
     tol = TOLERANCE.get(days, 3)
     candidates = [d for d in available if abs((d - target).days) <= tol]
@@ -69,10 +67,10 @@ def snapshot_days(session) -> list[date]:
 
 
 def compute_star_deltas(session, today: date) -> tuple[dict[int, Deltas], dict[int, date | None]]:
-    """Stern-Deltas für alle Repos, gegen die global gewählten Referenztage."""
+    """Star deltas for all repositories, against the globally chosen reference days."""
     days = snapshot_days(session)
     refs = {n: _pick_reference_day(days, today, n) for n in (7, 30)}
-    log.info("Referenztage für Stern-Deltas: %s", {k: str(v) for k, v in refs.items()})
+    log.info("Reference days for star deltas: %s", {k: str(v) for k, v in refs.items()})
 
     current = {
         rid: stars
@@ -105,7 +103,7 @@ def compute_star_deltas(session, today: date) -> tuple[dict[int, Deltas], dict[i
 
 
 def compute_install_deltas(session, today: date) -> dict[str, Deltas]:
-    """Dasselbe für die Installationszahlen, aber je Domain statt je Repo."""
+    """The same for installation counts, but per domain instead of per repository."""
     days = list(session.scalars(select(InstallSnapshot.day).distinct().order_by(InstallSnapshot.day)))
     refs = {n: _pick_reference_day(days, today, n) for n in (7, 30)}
 
@@ -141,7 +139,7 @@ def compute_install_deltas(session, today: date) -> dict[str, Deltas]:
 
 
 def load_github_activity(session) -> dict[int, dict]:
-    """Angereicherte GitHub-Daten, sofern der Anreicherungslauf schon gelaufen ist."""
+    """Enriched GitHub data, if the enrichment run has happened."""
     rows = session.execute(
         select(
             RepoGithub.repo_id,
@@ -191,11 +189,11 @@ def classify_health(
     now: datetime | None = None,
     thresholds: HealthThresholds | None = None,
 ) -> tuple[str, int | None]:
-    """Wartungszustand als Ampel plus Alter in Tagen.
+    """Maintenance state as a traffic light plus age in days.
 
-    Bewusst ein Hinweis, kein Urteil: eine kleine, fertige Integration für ein Gerät
-    mit stabiler API kann jahrelang ohne Commit korrekt laufen. Nur 'archived' und
-    'unavailable' sind harte Aussagen — alles andere ist Alter, sonst nichts.
+    A hint on purpose, not a verdict: a small, finished integration for a device with a
+    stable API can run correctly for years without a commit. Only 'archived' and
+    'unavailable' are hard statements - everything else is age, nothing more.
     """
     thresholds = thresholds or HealthThresholds()
     now = now or datetime.now(timezone.utc)
@@ -221,7 +219,7 @@ def classify_health(
 
 
 def activity_percentiles(session, today: date) -> dict[str, int]:
-    """Verteilung des Aktivitätsalters — Grundlage für datengetriebene Schwellen."""
+    """Distribution of activity age - the basis for data-driven thresholds."""
     rows = [
         r[0]
         for r in session.execute(
@@ -240,7 +238,7 @@ def activity_percentiles(session, today: date) -> dict[str, int]:
 
 
 def coverage(session, today: date) -> dict[str, int]:
-    """Wie viele Repos überhaupt einen Wert je Feld haben — gehört sichtbar ins UI."""
+    """How many repositories have a value per field at all - belongs visibly in the UI."""
     total = session.scalar(select(func.count()).select_from(Snapshot).where(Snapshot.day == today))
     with_stars = session.scalar(
         select(func.count())
