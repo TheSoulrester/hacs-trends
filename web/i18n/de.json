@@ -81,6 +81,8 @@
   "hint.noValue": "Kein Wert verfügbar",
   "hint.version": "Neuestes von HACS gemeldetes Release.",
   "hint.rankKept": "Platz in der ungefilterten Rangliste dieser Sicht.",
+  "hint.rankUp": "Gestiegen: gestern Platz {prev}, heute {now}. Pfeil ab {min} Plätzen.",
+  "hint.rankDown": "Gefallen: gestern Platz {prev}, heute {now}. Pfeil ab {min} Plätzen.",
   "hint.ambiguousDomain": "Mehrere HACS-Repositories beanspruchen diese Domain, die Zahl lässt sich keinem davon eindeutig zuordnen.",
   "hint.starsAdded": "Im Zeitraum vergebene Sterne. GitHub meldet keine entfernten Sterne, das ist also keine Netto-Änderung.",
   "hint.integrationsOnly": "Installationszahlen gibt es nur für Integrationen — Dashboard-Karten, Themes und Templates werden nicht erfasst.",

@@ -70,6 +70,11 @@ jobs:
 
       - name: Write today's slice and build the page
         id: build
+        # Places a repository has to move before the page draws a rank arrow. Set it under
+        # Settings -> Secrets and variables -> Actions -> Variables; unset means the default
+        # in config.py (3). Takes effect with the next run, not with the change.
+        env:
+          HACS_TRENDS_RANK_ARROW_MIN: ${{ vars.HACS_TRENDS_RANK_ARROW_MIN }}
         run: |
           hacs-trends history-write
           hacs-trends stats

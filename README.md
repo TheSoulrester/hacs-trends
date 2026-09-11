@@ -237,6 +237,7 @@ given to either.
 | **New in HACS** | Ranked by that acceptance date. The first daily slice a repository appears in is kept as a fallback for anything the list has not caught up with. |
 | **Downloads** | The release asset counter from the HACS dataset. Only about a third of repositories have one, because HACS installs from source when a release carries no assets. Shown, never ranked on. |
 | **Rank number** | The position in the current view's full ranking, assigned before your search and filters are applied — so a search result also tells you where it stands. |
+| **Rank arrow** | Green up or red down beside the rank number when a repository stands at least 3 places higher or lower than yesterday — same view, same window, same rule. Yesterday's list is rebuilt from the day-by-day history, not remembered per visitor. Shown in *Gaining attention*, *Rising for their size* and *Actually being used*; not in views sorted by a date or a count everyone ages along with. The 3 can be changed with the `HACS_TRENDS_RANK_ARROW_MIN` environment variable (a repository variable of that name in GitHub Actions); the tooltip always states the value in use. |
 
 **What is deliberately not measured**
 

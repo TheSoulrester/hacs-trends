@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import func, select
 
-from .config import Config
+from .config import RANK_ARROW_MIN_DEFAULT, Config
 from .db import InstallSnapshot, Repo, Snapshot, make_engine, make_session_factory
 from .metrics import (
     HealthThresholds,
@@ -39,6 +39,28 @@ log = logging.getLogger(__name__)
 # Below this many stars at the start of a window, a percentage says more about
 # rounding than about growth. The star median across HACS is 13.
 MIN_PCT_BASE = 25
+
+# The figures a rank arrow can be computed from: every sort key of the views that show
+# arrows (gaining attention, rising for their size, actually being used).
+RANK_KEYS = ("s", "inst") + tuple(f"d{n}" for n in WINDOWS) + tuple(f"p{n}" for n in WINDOWS)
+
+
+def _star_window_fields(stars, windows: dict, repo_id: int) -> dict:
+    """d{n} and p{n} for one repository. One function for today and for yesterday, so
+    the arrows compare two lists built by the same rule."""
+    out = {}
+    for n in WINDOWS:
+        gained = windows.get(n, {}).get(repo_id)
+        if gained:
+            out[f"d{n}"] = gained
+            # Percentage is measured against where the repository stood at the start of
+            # the window, not where it stands now - otherwise a repo that doubled would
+            # report 50% growth.
+            if stars is not None:
+                base = stars - gained
+                if base >= MIN_PCT_BASE:
+                    out[f"p{n}"] = round(gained / base * 100, 1)
+    return out
 
 
 def _iso_day(value) -> str | None:
@@ -72,7 +94,9 @@ def _iso_min(value) -> str | None:
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
 
 
-def build_payload(session, today: date | None = None) -> dict:
+def build_payload(
+    session, today: date | None = None, rank_arrow_min: int = RANK_ARROW_MIN_DEFAULT
+) -> dict:
     today = today or session.scalar(select(func.max(Snapshot.day)))
     if today is None:
         raise RuntimeError("Keine Snapshots in der Datenbank — erst 'hacs-trends sync' laufen lassen.")
@@ -89,6 +113,33 @@ def build_payload(session, today: date | None = None) -> dict:
     gh = load_github_activity(session)
     thresholds = HealthThresholds()
     now = datetime.now(timezone.utc)
+
+    # Yesterday, for the rank arrows. Rebuilt from the day-by-day history rather than
+    # read from yesterday's published page: nothing to fetch, nothing to commit, and a
+    # failed run in between does not shift the baseline. Both daily runs compute the
+    # same windows (today is excluded), so "since the last run" would be empty every
+    # evening - the day is the unit that actually changes.
+    prev_day = today - timedelta(days=1)
+    stars_prev = {
+        rid: s
+        for rid, s in session.execute(
+            select(Snapshot.repo_id, Snapshot.stars).where(Snapshot.day == prev_day)
+        )
+    }
+    has_prev = use_history and bool(stars_prev)
+    star_windows_prev = window_sums(session, prev_day) if has_prev else {}
+    installs_prev = (
+        {
+            d: t
+            for d, t in session.execute(
+                select(InstallSnapshot.domain, InstallSnapshot.total).where(
+                    InstallSnapshot.day == prev_day
+                )
+            )
+        }
+        if has_prev
+        else {}
+    )
 
     versions_today = installs_by_version(session, today)
     installs_today = {
@@ -208,17 +259,7 @@ def build_payload(session, today: date | None = None) -> dict:
             if dom_entry and dom_entry[1]:
                 item["amb"] = 1  # Domain von mehreren Repos beansprucht
         if use_history:
-            for n in WINDOWS:
-                gained = star_windows.get(n, {}).get(r.id)
-                if gained:
-                    item[f"d{n}"] = gained
-                    # Percentage is measured against where the repository stood at the
-                    # start of the window, not where it stands now - otherwise a repo
-                    # that doubled would report 50% growth.
-                    if r.stars is not None:
-                        base = r.stars - gained
-                        if base >= MIN_PCT_BASE:
-                            item[f"p{n}"] = round(gained / base * 100, 1)
+            item.update(_star_window_fields(r.stars, star_windows, r.id))
         elif sd:
             for key, val in (("d7", sd.d7), ("d30", sd.d30)):
                 if val is not None:
@@ -247,6 +288,33 @@ def build_payload(session, today: date | None = None) -> dict:
                 item["hb"] = 1
             else:
                 item["ha"] = _iso_day(r.added_to_hacs)
+        # Yesterday's figures, only where they differ from today's: the page rebuilds
+        # yesterday's ranking from them. A missing key means "same as today", null means
+        # "had no value yesterday", and y: null means the repository was not listed.
+        if has_prev:
+            if r.id not in stars_prev:
+                item["y"] = None
+            else:
+                now_f = {k: item[k] for k in RANK_KEYS if k in item}
+                sp = stars_prev[r.id]
+                was = _star_window_fields(sp, star_windows_prev, r.id)
+                if sp is not None:
+                    was["s"] = sp
+                if installs_prev:
+                    ip = installs_prev.get(r.domain) if r.domain else None
+                    if ip is not None:
+                        was["inst"] = ip
+                elif "inst" in now_f:
+                    # No installation figures for yesterday at all: no arrows from
+                    # installations rather than every one of them "new".
+                    was["inst"] = now_f["inst"]
+                diff = {
+                    k: was.get(k)
+                    for k in RANK_KEYS
+                    if (k in now_f or k in was) and now_f.get(k) != was.get(k)
+                }
+                if diff:
+                    item["y"] = diff
         repos.append(item)
 
     repos.sort(key=lambda x: -(x.get("s") or 0))
@@ -277,7 +345,12 @@ def build_payload(session, today: date | None = None) -> dict:
             # written out a second time in app.js, where it could drift away from the
             # value the figures were actually computed with.
             "min_pct_base": MIN_PCT_BASE,
+            # Places a repository has to move before the page draws a rank arrow.
+            # HACS_TRENDS_RANK_ARROW_MIN, default in config.py.
+            "rank_arrow_min": rank_arrow_min,
         },
+        # The day the rank arrows compare against; null when there is no history for it.
+        "rank_prev_day": prev_day.isoformat() if has_prev else None,
         "enriched": bool(gh),
         "adoption_domains": len(versions_today),
         "counts": {"repos": len(repos)},
@@ -291,7 +364,7 @@ def export(config: Config, out_path: Path | None = None) -> Path:
     out_path = out_path or (config.db_path.parent.parent / "docs" / "data.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with Session() as session:
-        payload = build_payload(session)
+        payload = build_payload(session, rank_arrow_min=config.rank_arrow_min)
     out_path.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False))
     size = out_path.stat().st_size
     log.info("Export: %s (%d Repos, %.1f KB)", out_path, len(payload["repos"]), size / 1024)

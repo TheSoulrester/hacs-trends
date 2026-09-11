@@ -207,7 +207,8 @@ function effectiveWindow() {
 var ORDER = ["trending", "installed", "breakout", "momentum", "ships", "maintenance", "fresh"];
 
 var COLS = {
-  rank:      { w: "44px", i18n: null, nosort: true },
+  /* 62px: four digits of the place plus the rank-arrow slot, measured in the mono face. */
+  rank:      { w: "62px", i18n: null, nosort: true },
   repo:      { w: "minmax(230px,3fr)", i18n: "col.repository", sort: "n", str: true },
   cat:       { w: "124px", i18n: "col.category", sort: "c", str: true, cls: "hide-sm" },
   stars:     { w: "84px", i18n: "col.stars", sort: "s", right: true },
@@ -330,6 +331,85 @@ function computeMomentum(w) {
   });
 }
 
+/* One ordering rule for today's list and for yesterday's, so an arrow can only ever
+   report a change in the figures, never a difference between two sort functions. */
+function sortRows(list, key, dir, tie) {
+  var str = key === "n" || key === "c" || key === "ha";
+  list.sort(function (a, b) {
+    var x = a[key], y = b[key];
+    var ax = x === undefined || x === null, ay = y === undefined || y === null;
+    /* Rows without a value sink in BOTH directions - otherwise an ascending sort
+       fills the top of the table with gaps. */
+    if (ax && ay) return (b.s || 0) - (a.s || 0);
+    if (ax) return 1;
+    if (ay) return -1;
+    if (str) return dir * String(x).localeCompare(String(y), LOCALE);
+    var d = dir > 0 ? x - y : y - x;
+    if (d === 0 && tie) return tie(a, b);
+    return d;
+  });
+  return list;
+}
+
+/* ----------------------------------------------------------- rank arrows ---
+ * A green arrow up or a red one down beside the place, when a repository stands at least
+ * meta.thresholds.rank_arrow_min places higher or lower than yesterday - same view, same
+ * window, same rule. Yesterday's list is rebuilt here from the figures the export ships
+ * under "y" (only those that differ from today's: missing means unchanged, null means
+ * no value, y: null means not listed), so the ranking logic exists once.
+ * Only the views whose order is a trend. The others sort by a date or a count everyone
+ * ages along with - in "new in HACS" every newcomer would push the whole list down one
+ * place and draw an arrow for it. Momentum waits for enough installation history. */
+var ARROW_VIEWS = { trending: 1, breakout: 1, installed: 1 };
+var Y_ROWS = null;
+function yesterdayRows() {
+  if (Y_ROWS) return Y_ROWS;
+  var keys = ["s", "inst"];
+  (DATA.meta.star_windows || []).forEach(function (w) { keys.push("d" + w, "p" + w); });
+  Y_ROWS = [];
+  for (var i = 0; i < ROWS.length; i++) {
+    var r = ROWS[i];
+    if (r.y === null) continue;
+    var o = { _src: r };
+    for (var k = 0; k < keys.length; k++) {
+      var v = r.y && keys[k] in r.y ? r.y[keys[k]] : r[keys[k]];
+      if (v !== undefined && v !== null) o[keys[k]] = v;
+    }
+    Y_ROWS.push(o);
+  }
+  /* Equal values keep the order they arrive in, and the export lists by stars - so
+     yesterday's list starts from yesterday's star order, as yesterday's page did. */
+  Y_ROWS.sort(function (a, b) { return (b.s || 0) - (a.s || 0); });
+  return Y_ROWS;
+}
+/* Arrows only for the view's own ranking. After a click on another column the list is
+   an ad-hoc sort, and "yesterday's place" in it would be a number nobody asked for. */
+function arrowsOn(key) {
+  return !!(DATA.meta.rank_prev_day && ARROW_VIEWS[view] === 1 && sortDir === -1 &&
+            key === VIEWS[view].sort(win));
+}
+function markMoves(base, key) {
+  var i, v = VIEWS[view];
+  for (i = 0; i < base.length; i++) base[i]._prev = undefined;
+  if (!arrowsOn(key)) return;
+  var y = sortRows(yesterdayRows().filter(function (o) { return !v.filter || v.filter(o, win); }),
+                   key, -1, null);
+  /* Rows without a value sink to an unranked tail ordered by stars; a place in it is
+     not a placement, today or yesterday. */
+  for (i = 0; i < y.length && y[i][key] !== undefined; i++) y[i]._src._prev = i + 1;
+  for (i = 0; i < base.length; i++) if (base[i][key] === undefined) base[i]._prev = undefined;
+}
+function moveHtml(r) {
+  var th = DATA.meta.thresholds || {}, min = th.rank_arrow_min || 3;
+  var prev = r._prev, pos = r._rank;
+  if (prev === undefined || !pos || Math.abs(prev - pos) < min) return '<span class="mv"></span>';
+  var up = prev > pos;
+  var tip = esc(t(up ? "hint.rankUp" : "hint.rankDown", { prev: n(prev), now: n(pos), min: n(min) }));
+  return '<span class="mv ' + (up ? "up" : "dn") + '" role="img" aria-label="' + tip +
+    '" title="' + tip + '"><svg viewBox="0 0 8 8" aria-hidden="true"><path d="' +
+    (up ? "M4 1 7.6 7H.4z" : "M4 7 7.6 1H.4z") + '"/></svg></span>';
+}
+
 function apply() {
   var v = VIEWS[view];
   if (view === "momentum") computeMomentum(win);
@@ -347,23 +427,9 @@ function apply() {
     base = baseList;
   } else {
     base = ROWS.filter(function (r) { return !v.filter || v.filter(r, win); });
-    var str = key === "n" || key === "c" || key === "ha";
-    var dir = sortDir;
-    var tie = (!sortKey && v.tie) ? v.tie : null;
-    base.sort(function (a, b) {
-    var x = a[key], y = b[key];
-    var ax = x === undefined || x === null, ay = y === undefined || y === null;
-    /* Rows without a value sink in BOTH directions - otherwise an ascending sort
-       fills the top of the table with gaps. */
-    if (ax && ay) return (b.s || 0) - (a.s || 0);
-    if (ax) return 1;
-    if (ay) return -1;
-    if (str) return dir * String(x).localeCompare(String(y), LOCALE);
-    var d = dir > 0 ? x - y : y - x;
-    if (d === 0 && tie) return tie(a, b);
-    return d;
-  });
+    sortRows(base, key, sortDir, (!sortKey && v.tie) ? v.tie : null);
     for (var i = 0; i < base.length; i++) base[i]._rank = i + 1;
+    markMoves(base, key);
     baseList = base; baseKey = bk;
   }
 
@@ -404,9 +470,9 @@ function cell(c, r, idx) {
   switch (c) {
     case "rank": {
       var pos = r._rank || idx + 1;
-      return '<span class="rn"' +
+      return '<span class="rk"><span class="rn"' +
         (pos === idx + 1 ? "" : ' title="' + esc(t("hint.rankKept")) + '"') +
-        ">" + pos + "</span>";
+        ">" + pos + "</span>" + moveHtml(r) + "</span>";
     }
     case "repo":
       return '<span class="repo">' + iconHtml(r) +
@@ -522,7 +588,8 @@ function subFor(r) {
 
 function cardHtml(r, idx) {
   var b = bigFor(r);
-  return '<div class="mcard"><span class="rn">' + (r._rank || idx + 1) + "</span>" +
+  return '<div class="mcard"><span class="rk"><span class="rn">' + (r._rank || idx + 1) +
+    "</span>" + moveHtml(r) + "</span>" +
     iconHtml(r) +
     '<span class="mbody"><span class="l1">' +
     '<a href="https://github.com/' + esc(r.n) + '" target="_blank" rel="noopener">' +

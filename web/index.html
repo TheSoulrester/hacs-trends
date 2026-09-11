@@ -201,6 +201,16 @@ button{font:inherit;color:inherit;background:none;border:none}
 .cell{padding:0 11px;overflow:hidden;min-width:0}
 .cell.r{text-align:right}
 .rn{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-4)}
+/* Place and rank arrow. The number sits right-aligned in a slot four digits wide and the
+   arrow has a slot of its own after it, so the arrows stand in one column down the table
+   instead of wherever a one- or four-digit number happens to end. Colour carries the
+   direction twice - the shape already says it - for anyone who cannot tell green from red. */
+.rk{display:inline-grid;grid-template-columns:4ch 8px;column-gap:4px;align-items:center;
+  font-family:"JetBrains Mono",monospace;font-size:11px}
+.rk .rn{text-align:right}
+.mv{display:block;width:8px;height:8px}
+.mv svg{display:block;width:8px;height:8px;fill:currentColor}
+.mv.up{color:var(--pos);cursor:help} .mv.dn{color:var(--neg);cursor:help}
 .repo{display:flex;align-items:center;gap:10px;min-width:0}
 /* Shrink order when the cell runs out of room: the path first (weighted heavily), the
    name only after the path is gone, the version never. A name that could not shrink used
@@ -313,7 +323,8 @@ button{font:inherit;color:inherit;background:none;border:none}
 
   .row{display:block;padding:0;border-bottom:1px solid var(--rowline)}
   .mcard{display:flex;gap:10px;padding:11px 14px;height:var(--row);align-items:flex-start}
-  .mcard .rn{width:19px;flex-shrink:0;padding-top:8px;text-align:right}
+  .mcard .rk{width:19px;flex-shrink:0;padding-top:8px;display:flex;flex-direction:column;
+    align-items:flex-end;gap:4px}
   .mcard .ic{width:34px;height:34px;margin-top:2px}
   .mbody{min-width:0;flex:1;display:flex;flex-direction:column}
   .mbody .l1{display:flex;align-items:baseline;gap:8px;min-width:0}

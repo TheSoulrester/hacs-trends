@@ -1038,3 +1038,90 @@ once the daily refresh has run a few times and the date is worth showing.
 
 Not done: the git/folder cleanup requested on 9 Sept (files that should not be tracked, a
 consistent `.gitignore`).
+
+## 15. Rank arrows against yesterday
+
+A green arrow up or a red one down beside the rank number, when a repository stands at least
+*N* places higher or lower than it did yesterday (default *N* = 3). No figure beside the
+arrow; the tooltip names both places and *N*.
+
+### 15.1 What is compared
+
+Today's list against yesterday's — same view, same window, same ordering rule. A rolling
+window does not get in the way: the list is recomputed daily and the window moves one day,
+so the arrow describes how the list moved (like a music chart), not what happened today. A
+repository can drop in the 7-day list because a strong day eight days ago left the window.
+Longer windows move less, which is right: one day barely changes a year.
+
+"Since the last run" was rejected: both daily runs compute the same windows (`window_sums`
+excludes the current day), so the evening run would compare equal and clear every arrow.
+"Since your last visit" (localStorage) was rejected as per-visitor and empty on a first visit.
+
+### 15.2 Where yesterday comes from
+
+Rebuilt by the exporter from the day-by-day history already in the database —
+`window_sums(session, today - 1)`, yesterday's `Snapshot.stars` and yesterday's
+`InstallSnapshot.total`, through the same `_star_window_fields()` that computes today's
+`d{n}`/`p{n}`. Nothing is fetched from the published page and nothing new is committed; a
+failed run in between does not shift the baseline.
+
+Each repository carries `y` with only the sort keys that differ from today's
+(`s`, `inst`, `d7…d365`, `p7…p365`): a missing key means unchanged, `null` means no value
+yesterday, `"y": null` means not listed yesterday. Measured on the local database: +1.9 %
+raw, +9 KB gzip; with complete daily star data roughly 600 repositories change a star window
+per day plus about 800 installation totals, still in the low tens of KB gzip.
+
+Checked: for every repository and every key, the reconstructed yesterday equals what
+`build_payload(today=yesterday)` produces — 41,900 values, 0 mismatches.
+
+### 15.3 How the page ranks yesterday
+
+`app.js` builds yesterday's rows from `y`, runs them through the same filter and the same
+`sortRows()` as today's list, and stores yesterday's place on each row. Tie order: equal values
+keep the order they arrive in; yesterday's rows arrive sorted by yesterday's stars, and within
+equal stars in today's order — so a tie block does not reshuffle between the two lists by
+itself. Checked against an independent ranking in Python of the real previous-day export
+with that rule: 1,955 rows over five view/window combinations, 0 mismatches.
+
+Arrows appear only
+
+- in *Gaining attention*, *Rising for their size* and *Actually being used* (`ARROW_VIEWS`).
+  Not in *Ships reliably* (no daily history of the release count, a block of ties at the top),
+  *Possibly unmaintained* (everyone ages by the same day) or *New in HACS* (every newcomer
+  would push the whole list down one place). *Gaining and in use* waits: it needs 8 days of
+  installation history for `i7` on two consecutive days and ranks on an integer percentile
+  with many ties — to be measured first.
+- for the view's own ordering, descending. After a click on another column there is no arrow.
+- for rows with a value today and yesterday. The tail without a value is ordered by stars
+  and a place in it is not a placement.
+
+The rank column went from 44 to 62 px: the number sits right-aligned in a four-digit slot and
+the arrow has a fixed slot after it, so arrows form one column. (Four-digit places were already
+a few pixels too wide for 44 px.) On a phone the arrow sits under the number in the card.
+
+### 15.4 The threshold
+
+Measured on 21 days of real star history, arrows per day among the top 25 / top 100:
+
+| View / window | every move | from 3 | from 5 | from 10 |
+|---|---|---|---|---|
+| Gaining attention, 7 d | 20 / 91 | 10 / 68 | 5 / 53 | 1.5 / 37 |
+| Gaining attention, 30 d | 13 / 78 | 2 / 39 | 0.3 / 23 | 0 / 6 |
+| Gaining attention, 90 d | 5 / 61 | 0.3 / 19 | 0 / 6 | 0 / 1 |
+| Gaining attention, 365 d | 2 / 31 | 0 / 3 | 0 / 1 | 0 / 0 |
+| Rising for their size, 30 d | 15 / 78 | 5 / 36 | 2 / 24 | 1 / 12 |
+| Actually being used | 0 / 4.6 | 0 / 0.2 | 0 / 0 | 0 / 0 |
+
+Deep in a list values are small and tied (7 days: place 50 has 6 stars, place 100 has 3; 28
+distinct values in the top 100), so one star jumps a whole block. Every move would put an
+arrow on half the rows; from 5, the top of the default view would practically never show one.
+3 is one uniform rule for every view and window. A threshold relative to the place was
+considered and rejected: not explainable in one sentence.
+
+`HACS_TRENDS_RANK_ARROW_MIN` overrides it (config.py; empty, non-numeric or below 1 falls
+back to 3 with a warning). In CI it comes from the repository variable of the same name
+(Settings → Secrets and variables → Actions → Variables), passed to the export step in
+`sync.yml`; it takes effect with the next run. It travels in `meta.thresholds.rank_arrow_min`
+next to `min_pct_base`, so `app.js` has no second copy and the tooltip always states the value
+the arrows were drawn with.
+

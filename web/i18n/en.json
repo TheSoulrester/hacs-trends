@@ -81,6 +81,8 @@
   "hint.noValue": "No figure available",
   "hint.version": "Newest release reported by HACS.",
   "hint.rankKept": "Position in this view's unfiltered ranking.",
+  "hint.rankUp": "Up: #{prev} yesterday, #{now} today. Arrows from {min} places.",
+  "hint.rankDown": "Down: #{prev} yesterday, #{now} today. Arrows from {min} places.",
   "hint.ambiguousDomain": "Several HACS repositories claim this integration domain, so the figure cannot be attributed to one of them.",
   "hint.starsAdded": "Stars given during the period. GitHub does not report removed stars, so this is not a net change.",
   "hint.integrationsOnly": "Installation figures exist for integrations only — dashboard cards, themes and templates are not reported.",
